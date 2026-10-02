@@ -18,14 +18,11 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.time.Duration;
 import java.util.ArrayList;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Properties;
-import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
-import java.util.regex.Pattern;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
@@ -33,22 +30,19 @@ import java.util.zip.ZipInputStream;
 /**
  * Finds steamcmd and runs workshop downloads with it.
  *
- * Discovery order:
+ * Discovery order (deliberately minimal - no PATH parsing, no install
+ * location guessing):
  *   1. Explicit override ({@code steamcmd.path} in
  *      {@code <Zomboid>/workshopbridge.properties}) - always wins, but is
  *      still validated; a broken override fails fast with a clear message
- *      instead of silently falling through to auto-discovery.
- *   2. Direct scan of every directory on PATH (no {@code which}/{@code where}
- *      subprocess needed - works on systems without them) plus a per-OS list
- *      of common install locations (Scoop/Chocolatey shims on Windows,
- *      ~/.local/bin, ~/.steam, /usr/games, snap dirs on Linux, etc.).
- *   3. The mod-managed bootstrap dir from a previous run, so a bootstrapped
- *      copy is reused rather than re-downloaded every restart.
- *   Every candidate file is validated by actually executing it
+ *      instead of silently falling through.
+ *   2. The mod-managed bootstrap dir from a previous run, so a bootstrapped
+ *      copy is reused rather than re-downloaded.
+ *   Every candidate is validated by actually executing it
  *      ({@code <exe> +quit}, ~30s timeout) and checking the output looks like
  *      steamcmd. A file that merely exists is not proof it works (missing
  *      32-bit libs on Linux, corrupt installs, ...).
- *   4. If nothing usable is found, a working copy is bootstrapped automatically
+ *   3. If nothing usable is found, a working copy is bootstrapped automatically
  *      from Valve's CDN into the mod-managed {@code <Zomboid>/workshop_cache/steamcmd/}
  *      using only JDK stdlib (HttpClient + ZipInputStream + a small tar reader).
  *
@@ -95,7 +89,11 @@ public final class SteamCmd {
 
     /**
      * Absolute path to a validated steamcmd executable, or null when none is
-     * installed (and no override is set). Never triggers a download.
+     * configured yet. Never triggers a download.
+     *
+     * Deliberately simple: no PATH parsing, no guessing install locations.
+     * Either the user configured an explicit path, or we use our own
+     * bootstrapped copy. Anything in between is a support headache.
      */
     public String findExecutable() {
         overrideError = null;
@@ -117,17 +115,21 @@ public final class SteamCmd {
             return cachedExe;
         }
         cachedExe = null;
-        for (String c : discoveryPaths()) {
-            File f = new File(c);
-            if (!f.isFile()) {
-                continue;
-            }
-            if (validateExecutable(f.getAbsolutePath()) == null) {
-                cachedExe = f.getAbsolutePath();
-                return cachedExe;
-            }
+        // our own managed copy from a previous bootstrap - a known location,
+        // not a system-wide hunt
+        File managed = managedExe();
+        if (managed.isFile() && validateExecutable(managed.getAbsolutePath()) == null) {
+            cachedExe = managed.getAbsolutePath();
+            return cachedExe;
         }
         return null;
+    }
+
+    /** The steamcmd binary inside our mod-managed bootstrap dir. */
+    private File managedExe() {
+        return new File(zomboidDir,
+                "workshop_cache" + File.separator + "steamcmd" + File.separator
+                        + (isWindows() ? "steamcmd.exe" : "steamcmd.sh"));
     }
 
     /**
@@ -235,7 +237,8 @@ public final class SteamCmd {
     }
 
     // ------------------------------------------------------------------
-    // discovery
+    // ------------------------------------------------------------------
+    // validation
     // ------------------------------------------------------------------
 
     private static boolean isWindows() {
@@ -245,80 +248,6 @@ public final class SteamCmd {
     private static boolean isMac() {
         String os = System.getProperty("os.name", "").toLowerCase(Locale.ROOT);
         return os.contains("mac") || os.contains("darwin");
-    }
-
-    private static String env(String name) {
-        String v = System.getenv(name);
-        return v == null ? "" : v;
-    }
-
-    private static List<String> exeNames(boolean win) {
-        List<String> names = new ArrayList<>();
-        names.add("steamcmd");
-        names.add(win ? "steamcmd.exe" : "steamcmd.sh");
-        return names;
-    }
-
-    /** Ordered, de-duplicated candidate paths (existence is NOT checked here). */
-    private List<String> discoveryPaths() {
-        boolean win = isWindows();
-        boolean mac = isMac();
-        Set<String> out = new LinkedHashSet<>();
-        // 1. every directory on PATH, scanned directly (no which/where needed)
-        String pathEnv = System.getenv("PATH");
-        if (pathEnv != null && !pathEnv.isEmpty()) {
-            for (String dir : pathEnv.split(Pattern.quote(File.pathSeparator))) {
-                if (dir == null || dir.isEmpty()) {
-                    continue;
-                }
-                for (String name : exeNames(win)) {
-                    out.add(dir + File.separator + name);
-                }
-            }
-        }
-        // 2. per-OS common locations
-        String home = System.getProperty("user.home", "");
-        if (win) {
-            out.add(env("LOCALAPPDATA") + "\\steamcmd\\steamcmd.exe");
-            out.add(env("PROGRAMFILES") + "\\steamcmd\\steamcmd.exe");
-            out.add(env("PROGRAMFILES(X86)") + "\\steamcmd\\steamcmd.exe");
-            out.add(home + "\\scoop\\shims\\steamcmd.exe"); // Scoop shim
-            out.add(env("PROGRAMDATA") + "\\chocolatey\\bin\\steamcmd.exe"); // Chocolatey
-            out.add(home + "\\steamcmd\\steamcmd.exe");
-            out.add("C:\\steamcmd\\steamcmd.exe");
-        } else if (mac) {
-            out.add(home + "/Library/Application Support/steamcmd/steamcmd.sh");
-            out.add("/Applications/steamcmd/steamcmd.sh");
-            out.add(home + "/steamcmd/steamcmd.sh");
-            out.add("/usr/local/bin/steamcmd");
-            out.add("/opt/steamcmd/steamcmd.sh");
-        } else {
-            // Linux / other unix-likes (incl. non-FHS layouts - PATH scan above
-            // already covers the common custom-prefix case)
-            out.add(home + "/.local/bin/steamcmd");
-            out.add(home + "/steamcmd/steamcmd.sh");
-            out.add(home + "/.steam/steamcmd/steamcmd.sh");
-            out.add(home + "/snap/bin/steamcmd");
-            out.add("/snap/bin/steamcmd");
-            out.add("/usr/games/steamcmd");
-            out.add("/usr/local/bin/steamcmd");
-            out.add("/opt/steamcmd/steamcmd.sh");
-        }
-        // 3. the mod-managed bootstrap dir: reuse a previous bootstrap instead
-        // of re-downloading it (deliberately last - an explicit user install
-        // found above takes precedence)
-        File bootDir = new File(zomboidDir,
-                "workshop_cache" + File.separator + "steamcmd");
-        for (String name : exeNames(win)) {
-            out.add(bootDir.getAbsolutePath() + File.separator + name);
-        }
-        List<String> result = new ArrayList<>();
-        for (String c : out) {
-            if (c != null && !c.isEmpty() && !c.startsWith("\\") && !c.equals(File.separator)) {
-                result.add(c);
-            }
-        }
-        return result;
     }
 
     /**
@@ -432,14 +361,14 @@ public final class SteamCmd {
         String url = cdnUrl(win);
         log.accept("steamcmd not found - downloading from Valve (" + url + ")...");
         File tmp = new File(dir, "steamcmd-download.tmp");
+        final String exe;
         try {
             downloadFile(url, tmp, log);
             log.accept("Extracting steamcmd to " + dir + "...");
-            installArchive(tmp, win, dir, log);
+            exe = installArchive(tmp, win, dir, log);
         } finally {
             tmp.delete();
         }
-        String exe = installArchive(tmp, win, dir, log);
         // Fast-fail check with a targeted hint for the classic Linux problem.
         // A timeout here just means the first-run self-update kicked in; the
         // real download that follows will complete it.

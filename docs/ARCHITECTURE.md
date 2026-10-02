@@ -96,7 +96,7 @@ Jobs run on Java background threads. Lua never blocks waiting on them.
 
 ### First run / missing pieces
 - ZombieBuddy not installed → Lua detects `wbIsAvailable() == false` (globals missing) → Mods menu shows install guidance instead of Update buttons.
-- steamcmd not found → the Java side **bootstraps it automatically** from Valve's CDN into `Zomboid/workshop_cache/steamcmd/` (inside the download job, with progress). Every discovered candidate is validated by execution before use. Explicit override always wins: `steamcmd.path` in `Zomboid/workshopbridge.properties`. `wbGetSteamCmdPath()` returns nil only when nothing is installed *and* no override is set (i.e. before first bootstrap).
+- steamcmd not found → the Java side **bootstraps it automatically** from Valve's CDN into `Zomboid/workshop_cache/steamcmd/` (inside the download job, with progress). No system-wide discovery: either `steamcmd.path` in `Zomboid/workshopbridge.properties` (validated by execution, always wins) or the previously bootstrapped managed copy. `wbGetSteamCmdPath()` returns nil only when neither exists yet.
 
 ## UI placement (B42)
 
