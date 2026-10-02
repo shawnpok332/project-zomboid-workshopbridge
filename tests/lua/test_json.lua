@@ -1,0 +1,93 @@
+-- Tests for WB_Json.lua (the Java->Lua job-status bridge). Run with plain lua 5.4.
+dofile(os.getenv("WB_LUA_DIR") .. "/WB_Json.lua")
+
+local failures = 0
+local function check(cond, name, extra)
+    if cond then print("PASS " .. name)
+    else print("FAIL " .. name .. (extra and (" -- " .. tostring(extra)) or "")); failures = failures + 1 end
+end
+local function ok(name, fn) check(pcall(fn), name) end
+local function errs(name, s)
+    local good, err = pcall(WB_JsonDecode, s)
+    check(not good, name, good and "parsed but should have failed" or nil)
+end
+
+-- basic shapes
+ok("object", function()
+    local t = WB_JsonDecode('{"a":1,"b":"x","c":true,"d":false,"e":null}')
+    assert(t.a == 1 and t.b == "x" and t.c == true and t.d == false and t.e == nil)
+end)
+ok("nested", function()
+    local t = WB_JsonDecode('{"outer":{"inner":[1,2,{"deep":"val"}]}}')
+    assert(t.outer.inner[3].deep == "val" and t.outer.inner[2] == 2)
+end)
+ok("empty containers", function()
+    local t = WB_JsonDecode('{"a":[],"o":{}}')
+    assert(#t.a == 0 and next(t.o) == nil)
+end)
+ok("numbers", function()
+    local t = WB_JsonDecode('{"i":-42,"f":3.14,"e":1e3,"ne":-2.5E-2,"z":0}')
+    assert(t.i == -42 and math.abs(t.f - 3.14) < 1e-9 and t.e == 1000
+        and math.abs(t.ne + 0.025) < 1e-9 and t.z == 0)
+end)
+ok("whitespace", function()
+    local t = WB_JsonDecode('  { "a" : [ 1 , 2 ] } \n\t')
+    assert(t.a[1] == 1 and t.a[2] == 2)
+end)
+ok("escapes", function()
+    local t = WB_JsonDecode('"a\\"b\\\\c\\/d\\be\\ff\\ng\\rh\\ti"')
+    assert(t == 'a"b\\c/d\be\ff\ng\rh\ti', string.format("%q", t))
+end)
+ok("unicode bmp", function()
+    local t = WB_JsonDecode('"\\u0041\\u00e9"')
+    assert(t == "A" .. "\195\169", string.format("%q", t))  -- A + é in UTF-8
+end)
+ok("unicode surrogate pair", function()
+    local t = WB_JsonDecode('"\\ud83d\\ude00"')  -- U+1F600
+    assert(#t == 4 and t:byte(1) == 0xF0, string.format("%d bytes", #t))
+end)
+ok("unicode lone low surrogate errors", function()
+    local good = pcall(WB_JsonDecode, '"\\ude00"')
+    assert(not good)
+end)
+ok("job status shape", function()
+    local t = WB_JsonDecode('{"id":"job-1","state":"done","done":3,"total":3,'
+        .. '"updates":["moda","modb"],"installed":[],"failed":[],"error":""}')
+    assert(t.state == "done" and t.done == 3 and #t.updates == 2 and t.updates[1] == "moda")
+end)
+ok("job running shape", function()
+    local t = WB_JsonDecode('{"id":"job-1","state":"running","done":1,"total":5,'
+        .. '"current":"some text with \\"quotes\\"","error":""}')
+    assert(t.current == 'some text with "quotes"')
+end)
+ok("nested quotes/braces in strings", function()
+    local t = WB_JsonDecode('{"s":"}{\\", \\" : [\\"","a":[1]}')
+    assert(t.s == '}{", " : ["' and t.a[1] == 1)
+end)
+
+-- malformed input must raise
+errs("empty", "")
+errs("truncated object", '{"a":1')
+errs("trailing comma object", '{"a":1,}')
+errs("trailing comma array", '[1,2,]')
+errs("missing colon", '{"a" 1}')
+errs("single quotes", "{'a':1}")
+errs("bad literal", '{"a":nul}')
+errs("trailing garbage", '{}x')
+errs("double value", '{"a": }')
+errs("unterminated string", '"abc')
+ok("unknown escape passes through literally (documented leniency)", function()
+    assert(WB_JsonDecode('"\\x"') == "x")
+end)
+errs("bad unicode", '"\\uZZZZ"')
+ok("raw control char passes through (documented leniency)", function()
+    assert(WB_JsonDecode('"a\001b"') == "a\001b")
+end)
+ok("leading zero parses leniently", function()
+    assert(WB_JsonDecode('{"a":01}').a == 1)
+end)
+errs("bare number end", '{"a":1e}')
+errs("lone low surrogate", '"\\ud800"')
+
+print(failures == 0 and "ALL JSON TESTS PASSED" or (failures .. " FAILURES"))
+os.exit(failures == 0 and 0 or 1)

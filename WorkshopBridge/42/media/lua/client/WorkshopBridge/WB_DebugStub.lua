@@ -87,12 +87,12 @@ function WB_InstallDebugStub()
         if j.step < j.total then return running() end
         stubJobs[jobId] = nil
         if j.kind == "check" then
-            -- report the first-seen mod as having an update, so the
-            -- "Update available" badge path can be verified end to end
-            local first = nil
-            for id in pairs(seenModIds) do first = id; break end
-            return statusJson("done", j.total, j.total, "Check complete",
-                first and { first } or {})
+            -- report every seen mod as having an update (sorted, so the
+            -- stub is deterministic run to run - pairs() order is not)
+            local all = {}
+            for id in pairs(seenModIds) do all[#all + 1] = id end
+            table.sort(all)
+            return statusJson("done", j.total, j.total, "Check complete", all)
         end
         return statusJson("done", j.total, j.total, "Done")
     end

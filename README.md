@@ -4,10 +4,6 @@ Download and update Steam Workshop mods **from inside Project Zomboid** — buil
 
 A Lua UI in the Mods menu ("Check for updates", "Update all", per-mod "Update") talks to a Java backend (via [ZombieBuddy](https://github.com/zed-0xff/ZombieBuddy)) that runs `steamcmd`, moves downloaded mods into place, and remembers which workshop item each mod came from.
 
-## Status
-
-Lua UI and Java backend are implemented. The Lua side is verified with an offline test rig (JSON decoder + full UI flow); the Java side compiles under JDK 17 and passes an offline harness with a fake steamcmd. Still ahead: in-game verification, real steamcmd end-to-end, release hardening. See [PLAN.md](PLAN.md).
-
 ## Installation
 
 1. **Install [ZombieBuddy](https://github.com/zed-0xff/ZombieBuddy)** (one-time). WorkshopBridge's Java backend loads through it. The mod tells you in-game if it's missing.
