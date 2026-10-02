@@ -1,0 +1,23 @@
+# Gradle
+.gradle/
+build/
+out/
+
+# Compiled classes
+*.class
+
+# Local libs (ZombieBuddy.jar etc. live here untracked; see java-src README)
+!libs/.gitkeep
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Game / local test artifacts (never commit your Zomboid folder or caches)
+Zomboid/
+workshop_cache/

@@ -1,0 +1,20 @@
+// WorkshopBridge Java backend (skeleton - Phase 1).
+// Built with Gradle against ZombieBuddy + PZ classes in Phase 3.
+// See the ZombieBuddy ModdingGuide for the compileOnly setup.
+
+plugins {
+    id 'java'
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    // TODO(Phase 3): compileOnly files('libs/ZombieBuddy.jar')
+    // TODO(Phase 3): compileOnly PZ game classes (see ZombieBuddy ModdingGuide)
+}
+
+// TODO(review): verify Java toolchain version against current B42
+// (research noted drift between "Java 17 required by the game" and JDK 25
+// used by a current ZombieBuddy mod's build docs).
