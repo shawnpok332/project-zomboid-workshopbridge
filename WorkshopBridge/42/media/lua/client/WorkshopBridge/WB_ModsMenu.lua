@@ -167,13 +167,16 @@ local function WB_WrapRowDrawing(ms)
     local _origDraw = list.doDrawItem
     if type(_origDraw) ~= "function" then return end
     list.doDrawItem = function(lb, y, item, alt)
-        _origDraw(lb, y, item, alt)
+        -- vanilla prerender does arithmetic on the return value
+        -- (v.height = y2 - y), so it MUST be propagated
+        local y2 = _origDraw(lb, y, item, alt)
         local modId = item and WB_GetModId(item)
         if modId and WB_IsUpdateAvailable(modId) then
             -- drawTextRight: right-aligned at x, no manual width measuring needed
             lb:drawTextRight(WB_Text.UpdateAvailableBadge, lb:getWidth() - 10, y,
                 0.5, 1.0, 0.5, 1.0, UIFont.Small)
         end
+        return y2
     end
 end
 

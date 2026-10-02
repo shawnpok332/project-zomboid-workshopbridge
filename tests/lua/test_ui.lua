@@ -55,6 +55,7 @@ local fakeList = {
     width = 600,
     doDrawItem = function(lb, y, item, alt)
         table.insert(rowsDrawn, { item = item })
+        return y + 40 -- vanilla returns y + height; prerender does math on it
     end,
     getWidth = function(self) return self.width end,
     drawTextRight = function(self, text, x, y, r, g, b, a, font)
@@ -82,7 +83,9 @@ local function fakeModInfo(modId, workshopID)
 end
 
 -- ---------- load the real mod files ----------
-local tmp = "/tmp/wb-luatest"
+local tmp = os.getenv("TMPDIR") or "/tmp"
+tmp = tmp .. "/wb-luatest"
+os.execute("mkdir -p " .. tmp)
 os.execute("ln -sfn " .. LUA_DIR .. " " .. tmp .. "/WorkshopBridge")
 package.path = tmp .. "/?.lua;" .. package.path
 require("WorkshopBridge/WB_Main")
@@ -151,7 +154,8 @@ check(ms.wbUpdateAllBtn.title == "Update all (2)", "update-all button shows coun
 
 -- row badge
 rowsDrawn, badgesDrawn = {}, {}
-fakeList:doDrawItem(100, fakeModInfo("SomeMod", ""), false)
+local retY = fakeList:doDrawItem(100, fakeModInfo("SomeMod", ""), false)
+check(retY == 140, "wrapper propagates doDrawItem return value", retY)
 check(#rowsDrawn == 1 and #badgesDrawn == 1, "badge drawn for update-available mod")
 check(badgesDrawn[1] and badgesDrawn[1].text == WB_Text.UpdateAvailableBadge, "badge text")
 rowsDrawn, badgesDrawn = {}, {}
