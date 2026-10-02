@@ -1,47 +1,94 @@
 package com.workshopbridge;
 
-import me.zed-0xff.zombie_buddy.Exposer;
+import se.krka.kahlua.integration.annotations.LuaMethod;
 
 /**
- * ZombieBuddy-exposed API callable from Lua. Skeleton - Phase 1.
+ * The Lua-visible API, exposed as plain globals via ZombieBuddy.
  *
- * Phase 3 will implement each method and decide the final exposure style
- * ({@code @Exposer.LuaClass} table vs {@code @LuaMethod(global = true)} globals).
- * The Lua-side contract is documented in docs/ARCHITECTURE.md.
+ * Every method is static, non-blocking and thread-safe: anything slow runs on
+ * a JobManager background thread and Lua polls {@link #wbGetJobStatus}.
+ * {@code wbGetJobStatus} returns a JSON string (decoded in Lua by WB_Json)
+ * because Kahlua return marshaling of Java objects is not something we want
+ * to depend on.
  */
-@Exposer.LuaClass
-public class SteamCmdApi {
+public final class SteamCmdApi {
+    private SteamCmdApi() {}
 
-    /** True when the Java side loaded; Lua uses this to detect ZombieBuddy presence. */
-    public boolean isAvailable() {
-        return true; // TODO(Phase 3)
+    @LuaMethod(name = "wbIsAvailable", global = true)
+    public static boolean wbIsAvailable() {
+        try {
+            Backend.get();
+            return true;
+        } catch (Throwable t) {
+            System.out.println("[WorkshopBridge] backend init failed: " + t);
+            return false;
+        }
     }
 
-    /** steamcmd executable path, or null when not detected. */
-    public String getSteamCmdPath() {
-        return null; // TODO(Phase 3): PATH -> common locations -> user-configured path
+    /** Absolute steamcmd path, or null when not detected. */
+    @LuaMethod(name = "wbGetSteamCmdPath", global = true)
+    public static String wbGetSteamCmdPath() {
+        try {
+            return Backend.get().steamCmd().findExecutable();
+        } catch (Throwable t) {
+            return null;
+        }
     }
 
     /**
-     * Workshop ID for a PZ mod id (the {@code id=} value from mod.info),
-     * or null when the mod wasn't installed via WorkshopBridge ("Unknown workshop ID").
+     * Workshop id for a PZ mod id (the {@code id=} value from mod.info),
+     * or null when the mod wasn't installed via WorkshopBridge.
      */
-    public String getWorkshopId(String modId) {
-        return null; // TODO(Phase 3): invert WorkshopMap
+    @LuaMethod(name = "wbGetWorkshopId", global = true)
+    public static String wbGetWorkshopId(String modId) {
+        try {
+            return modId == null ? null : Backend.get().workshopMap().getWorkshopId(modId);
+        } catch (Throwable t) {
+            return null;
+        }
     }
 
-    /** Starts an update job for one workshop item. Returns a job id for polling. */
-    public String updateMod(String workshopId) {
-        return null; // TODO(Phase 3): JobManager.submit(...)
+    /** Starts an update-check job. Returns a job id, or null on failure. */
+    @LuaMethod(name = "wbCheckForUpdates", global = true)
+    public static String wbCheckForUpdates() {
+        try {
+            return Backend.get().jobs().submitCheck();
+        } catch (Throwable t) {
+            return null;
+        }
     }
 
-    /** Starts an update-all job (check, then download only outdated items). Returns a job id. */
-    public String updateAll() {
-        return null; // TODO(Phase 3): JobManager.submit(...)
+    /** Starts an update-all job. Returns a job id, or null on failure. */
+    @LuaMethod(name = "wbUpdateAll", global = true)
+    public static String wbUpdateAll() {
+        try {
+            return Backend.get().jobs().submitUpdateAll();
+        } catch (Throwable t) {
+            return null;
+        }
     }
 
-    /** Polls a job. Returns a status table (shape in docs/ARCHITECTURE.md), or null for unknown job. */
-    public Object getJobStatus(String jobId) {
-        return null; // TODO(Phase 3): JobManager.status(jobId)
+    /** Starts an update job for one workshop item. Returns a job id, or null on failure. */
+    @LuaMethod(name = "wbUpdateMod", global = true)
+    public static String wbUpdateMod(String workshopId) {
+        try {
+            return Backend.get().jobs().submitUpdate(workshopId);
+        } catch (Throwable t) {
+            return null;
+        }
+    }
+
+    /**
+     * Polls a job. Returns a JSON status object
+     * ({@code state/done/total/message[/error][/updates]}), or null for
+     * unknown job ids. See docs/ARCHITECTURE.md for the shape.
+     */
+    @LuaMethod(name = "wbGetJobStatus", global = true)
+    public static String wbGetJobStatus(String jobId) {
+        try {
+            return jobId == null ? null : Backend.get().jobs().statusJson(jobId);
+        } catch (Throwable t) {
+            return null;
+        }
     }
 }

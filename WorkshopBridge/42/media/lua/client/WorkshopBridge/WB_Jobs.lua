@@ -4,6 +4,7 @@
 -- tick so the game thread never blocks. Status table shape is defined in
 -- docs/ARCHITECTURE.md ("Job status shape").
 require "WorkshopBridge/WB_Config"
+require "WorkshopBridge/WB_Json"
 
 local activeJobs = {}       -- jobId -> { onUpdate=fn, onDone=fn }
 local updateAvailable = {}  -- modId -> true (set by check jobs)
@@ -50,8 +51,15 @@ end
 function WB_PollJobs()
     wbTick = wbTick + 1
     for jobId, cb in pairs(activeJobs) do
-        local ok, st = pcall(wbGetJobStatus, jobId)
-        if ok and type(st) == "table" then
+        -- wbGetJobStatus returns a JSON string (see docs/ARCHITECTURE.md);
+        -- decode it into a table here.
+        local ok, s = pcall(wbGetJobStatus, jobId)
+        local st = nil
+        if ok and type(s) == "string" then
+            local dok, dec = pcall(WB_JsonDecode, s)
+            if dok then st = dec end
+        end
+        if type(st) == "table" then
             if cb.onUpdate then pcall(cb.onUpdate, st) end
             if st.state ~= "running" then
                 activeJobs[jobId] = nil

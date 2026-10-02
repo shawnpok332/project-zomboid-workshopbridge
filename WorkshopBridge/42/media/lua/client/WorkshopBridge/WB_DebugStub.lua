@@ -12,6 +12,29 @@ local seenModIds = {}
 local stubJobs = {}
 local jobSeq = 0
 
+-- The real wbGetJobStatus returns a JSON string; the stub mirrors that so the
+-- UI path under test is identical.
+local function jesc(s)
+    return '"' .. tostring(s):gsub('[%z\1-\31\\"]', function(c)
+        if c == '"' then return '\\"'
+        elseif c == '\\' then return '\\\\'
+        elseif c == '\n' then return '\\n'
+        elseif c == '\r' then return '\\r'
+        elseif c == '\t' then return '\\t'
+        else return string.format('\\u%04x', c:byte()) end
+    end) .. '"'
+end
+
+local function statusJson(state, done, total, message, updates)
+    local up = {}
+    for _, id in ipairs(updates or {}) do up[#up + 1] = jesc(id) end
+    return '{"state":' .. jesc(state)
+        .. ',"done":' .. done
+        .. ',"total":' .. total
+        .. ',"message":' .. jesc(message)
+        .. ',"updates":[' .. table.concat(up, ",") .. ']}'
+end
+
 local function newJob(kind, total)
     jobSeq = jobSeq + 1
     local id = "stub-" .. kind .. "-" .. jobSeq
@@ -53,34 +76,25 @@ function WB_InstallDebugStub()
         local j = stubJobs[jobId]
         if not j then return nil end
         j.calls = j.calls + 1
+        local function running()
+            return statusJson("running", j.step, j.total,
+                (j.kind == "check" and "Checking... " or "Working... ")
+                    .. j.step .. "/" .. j.total)
+        end
         -- advance slowly so the progress panel / throbber is actually visible
-        if j.calls % 12 ~= 0 then
-            return {
-                state = "running", done = j.step, total = j.total,
-                message = (j.kind == "check" and "Checking... " or "Working... ")
-                    .. j.step .. "/" .. j.total,
-            }
-        end
+        if j.calls % 12 ~= 0 then return running() end
         j.step = j.step + 1
-        if j.step >= j.total then
-            stubJobs[jobId] = nil
-            if j.kind == "check" then
-                -- report the first-seen mod as having an update, so the
-                -- "Update available" badge path can be verified end to end
-                local first = nil
-                for id in pairs(seenModIds) do first = id; break end
-                return {
-                    state = "done", done = j.total, total = j.total,
-                    message = "Check complete",
-                    updates = first and { first } or {},
-                }
-            end
-            return { state = "done", done = j.total, total = j.total, message = "Done" }
+        if j.step < j.total then return running() end
+        stubJobs[jobId] = nil
+        if j.kind == "check" then
+            -- report the first-seen mod as having an update, so the
+            -- "Update available" badge path can be verified end to end
+            local first = nil
+            for id in pairs(seenModIds) do first = id; break end
+            return statusJson("done", j.total, j.total, "Check complete",
+                first and { first } or {})
         end
-        return {
-            state = "running", done = j.step, total = j.total,
-            message = "Working... " .. j.step .. "/" .. j.total,
-        }
+        return statusJson("done", j.total, j.total, "Done")
     end
 
     print("[WorkshopBridge] DEBUG STUB installed (fake Java API)")

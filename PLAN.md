@@ -30,15 +30,25 @@ Open verification items (need a real B42 install):
 - Job polling UI: progress indicator (done/total/message from the job status) so long downloads/checks give visible feedback; errors surfaced, not silent.
 - [ ] **Checkpoint:** shawnpok332 verifies in-game (B42 + ZombieBuddy installed, Java stubs returning canned responses).
 
-## Phase 3 — Java side (together, after Phase 2 sign-off)
+## Phase 3 — Java side (in progress, started while shawnpok332 reinstalls)
 
-- `SteamCmd`: detect steamcmd (PATH → common locations → user-configured path), spawn via `ProcessBuilder` on background threads, capture output.
-- `WorkshopMap`: persist `workshopID → {modIds, timeUpdated, lastDownloaded}` as JSON under `Zomboid/`; invert for modID → workshopID lookups.
-- Download flow: `+force_install_dir` to a cache dir → `+login anonymous` → `+workshop_download_item 108600 <id>` → `+quit`; move `mods/*` into `Zomboid/mods/` (replace existing); update map from `mod.info` `id=` lines.
-- Update check: keyless `ISteamRemoteStorage/GetPublishedFileDetails` → compare `time_updated` vs stored; download only when newer.
-- `JobManager`: background jobs with pollable status; cancellation.
-- Edge cases: workshop item with multiple mods; workshop item deleted; steamcmd missing 32-bit libs on Linux; anonymous login rejected → account-login fallback (interactive, never store credentials); Steam Guard UX; read the game's own `ChooseGameInfo.getModDetails(modId).getWorkshopID()` as a supplementary "Managed by Steam" signal.
+Implemented (uncompiled — needs ZombieBuddy.jar + PZ classes, see java-src/README):
+- `SteamCmdApi` (Lua globals via `@LuaMethod(global=true)`), `Backend` (lazy singleton),
+  `JobManager` (background jobs, JSON status), `WorkshopMap` (persisted JSON map),
+  `SteamCmd` (detection + `ProcessBuilder` downloads), `ModInstaller` (clean-replace
+  installs, `mod.info` id parsing), `WorkshopApi` (keyless `GetPublishedFileDetails`),
+  `Json` (minimal parser/writer), `Main` (load logging).
+- Lua contract updated: `wbGetJobStatus` returns a JSON string; new `WB_Json.lua`
+  decoder; debug stub mirrors the JSON contract.
+- Mod layout corrected to verified B42 form: `common/mod.info` (`require=ZombieBuddy`,
+  no backslash), `42/media/java/WorkshopBridge.jar`, `42/media/lua/...`.
+
+Still to do together:
+- Compile against real ZombieBuddy.jar + PZ classes; fix any API drift.
+- End-to-end test: install a small workshop mod, then update it.
+- Remaining edge cases: workshop item with multiple mods; workshop item deleted; steamcmd missing 32-bit libs on Linux; anonymous login rejected → account-login fallback (interactive, never store credentials); Steam Guard UX; read the game's own `ChooseGameInfo.getModDetails(modId).getWorkshopID()` as a supplementary "Managed by Steam" signal; job cancellation.
 - [ ] **Checkpoint:** end-to-end test — install a small workshop mod, then update it.
+- ZBS signing, VirusTotal per release (Phase 4).
 
 ## Phase 4 — Harden + release (after Phase 3)
 

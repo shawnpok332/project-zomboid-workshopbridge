@@ -1,20 +1,42 @@
-// WorkshopBridge Java backend (skeleton - Phase 1).
-// Built with Gradle against ZombieBuddy + PZ classes in Phase 3.
-// See the ZombieBuddy ModdingGuide for the compileOnly setup.
+// WorkshopBridge Java backend.
+//
+// Build requirements (compile-only, provided at runtime):
+//   1. ZombieBuddy.jar  -> put it in java-src/libs/
+//   2. PZ game classes  -> pass -PpzJavaDir=<path> (the game's Java directory,
+//      e.g. ".../ProjectZomboid/Contents/Java" on macOS; the folder holding the
+//      game's compiled classes on Windows/Linux). Defaults to libs/pz-java.
+//
+// Then:
+//   gradle -PpzJavaDir="<path-to-game-java>" installJar
+//
+// The JAR lands at WorkshopBridge/42/media/java/WorkshopBridge.jar, matching
+// javaJarFile in common/mod.info. Target Java 17 bytecode (runs on 17+).
 
 plugins {
     id 'java'
 }
 
-repositories {
-    mavenCentral()
-}
+def zbJar = file('libs/ZombieBuddy.jar')
+def pzJavaDir = project.hasProperty('pzJavaDir') ? project.property('pzJavaDir') : 'libs/pz-java'
 
 dependencies {
-    // TODO(Phase 3): compileOnly files('libs/ZombieBuddy.jar')
-    // TODO(Phase 3): compileOnly PZ game classes (see ZombieBuddy ModdingGuide)
+    compileOnly files(zbJar)
+    compileOnly files(pzJavaDir)
 }
 
-// TODO(review): verify Java toolchain version against current B42
-// (research noted drift between "Java 17 required by the game" and JDK 25
-// used by a current ZombieBuddy mod's build docs).
+java {
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
+}
+
+jar {
+    archiveBaseName = 'WorkshopBridge'
+}
+
+// Copies the built JAR into the mod's 42/media/java layout.
+tasks.register('installJar', Copy) {
+    dependsOn jar
+    from jar.archiveFile
+    into file('../42/media/java')
+    rename { 'WorkshopBridge.jar' }
+}

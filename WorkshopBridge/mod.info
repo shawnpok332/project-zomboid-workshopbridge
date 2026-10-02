@@ -1,7 +1,0 @@
-name=WorkshopBridge
-id=WorkshopBridge
-description=Download and update Steam Workshop mods from inside the game. Requires ZombieBuddy and steamcmd. (Skeleton - not functional yet.)
-require=\ZombieBuddy
-apiVersion=12.0
-javaJarFile=media/java/WorkshopBridge.jar
-javaPkgName=com.workshopbridge

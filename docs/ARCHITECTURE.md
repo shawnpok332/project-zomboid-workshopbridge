@@ -42,9 +42,9 @@ these exact names, e.g. via `@LuaMethod(name = "wbIsAvailable", global = true)`.
 | `wbCheckForUpdates()` | — | starts a job; returns jobId. A done status carries `updates` = list of **modIds** with updates available |
 | `wbUpdateMod(workshopId)` | workshop ID | jobId |
 | `wbUpdateAll()` | — | jobId (checks, then downloads only outdated items) |
-| `wbGetJobStatus(jobId)` | jobId | status table (see below), or `nil` if unknown job |
+| `wbGetJobStatus(jobId)` | jobId | **JSON string** `{"state","done","total","message"[,"error"][,"updates"]}`, or null for unknown jobs. Lua decodes it with the pure-Lua `WB_Json.lua` (Kahlua's Java return marshaling is deliberately not relied upon). A done check-job carries `updates` = list of **modIds** with updates available |
 
-### Job status shape (proposed, Lua polls via `Events.OnTick`)
+### Job status shape (JSON string, decoded in Lua by WB_Json)
 
 ```lua
 {
