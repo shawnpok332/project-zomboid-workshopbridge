@@ -53,6 +53,8 @@ public final class WorkshopApi {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new IOException("interrupted", e);
+        } catch (IOException e) {
+            throw new IOException(Net.friendlyMessage(e), e);
         }
         if (resp.statusCode() != 200) {
             throw new IOException("Steam API HTTP " + resp.statusCode());

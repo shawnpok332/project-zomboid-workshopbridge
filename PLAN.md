@@ -47,6 +47,7 @@ Still to do together:
 - Compile against real ZombieBuddy.jar + PZ classes; fix any API drift.
 - End-to-end test: install a small workshop mod, then update it.
 - Remaining edge cases: workshop item with multiple mods; workshop item deleted; steamcmd missing 32-bit libs on Linux; anonymous login rejected → account-login fallback (interactive, never store credentials); Steam Guard UX; read the game's own `ChooseGameInfo.getModDetails(modId).getWorkshopID()` as a supplementary "Managed by Steam" signal; job cancellation.
+- Network failures: no pre-flight probe by design — failures are translated to friendly messages (`Net.friendlyMessage`: "Couldn't reach Steam's servers - check your internet connection.") and surface through the job error in the Lua UI.
 - [ ] **Checkpoint:** end-to-end test — install a small workshop mod, then update it.
 - ZBS signing, VirusTotal per release (Phase 4).
 

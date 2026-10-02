@@ -421,6 +421,8 @@ public final class SteamCmd {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new IOException("interrupted while downloading " + url, e);
+        } catch (IOException e) {
+            throw new IOException(Net.friendlyMessage(e), e);
         }
         if (resp.statusCode() != 200) {
             throw new IOException("download failed: HTTP " + resp.statusCode() + " for " + url);
