@@ -31,15 +31,15 @@
 
 ## Lua ↔ Java contract (planned)
 
-Exposed as globals via ZombieBuddy (exact exposure style TBD in Phase 3 —
-`@Exposer.LuaClass` table vs `@LuaMethod(global=true)` functions):
+Exposed as **plain Lua globals** (`wbIsAvailable()` etc.) — Phase 3 must honor
+these exact names, e.g. via `@LuaMethod(name = "wbIsAvailable", global = true)`.
 
 | Function | Args | Returns |
 |---|---|---|
 | `wbIsAvailable()` | — | `true` when the Java side loaded (Lua uses this to detect ZombieBuddy presence) |
 | `wbGetSteamCmdPath()` | — | path string, or `nil` if not detected |
 | `wbGetWorkshopId(modId)` | PZ mod id (`mod.info` `id=`) | workshop ID string, or `nil` = "Unknown workshop ID" |
-| `wbCheckForUpdates()` | — | starts a job; returns jobId. Job result lists workshop IDs with updates |
+| `wbCheckForUpdates()` | — | starts a job; returns jobId. A done status carries `updates` = list of **modIds** with updates available |
 | `wbUpdateMod(workshopId)` | workshop ID | jobId |
 | `wbUpdateAll()` | — | jobId (checks, then downloads only outdated items) |
 | `wbGetJobStatus(jobId)` | jobId | status table (see below), or `nil` if unknown job |

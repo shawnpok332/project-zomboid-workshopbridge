@@ -1,15 +1,40 @@
--- WorkshopBridge entry point (client). Skeleton - Phase 1.
-require "shared/WorkshopBridge/WB_Config"
+-- WorkshopBridge entry point (client).
+require "WorkshopBridge/WB_Config"
+require "WorkshopBridge/WB_Jobs"
+require "WorkshopBridge/WB_ModsMenu"
 
--- TODO(Phase 2): detect the ZombieBuddy-exposed Java API. If the globals
--- (wbIsAvailable etc., see docs/ARCHITECTURE.md) are missing, the Mods menu
--- should show "ZombieBuddy required" guidance instead of Update buttons.
+-- "java" | "stub" | nil
+WB_ApiKind = nil
 
-local function WB_OnInit()
-    print("[WorkshopBridge] init (skeleton, Phase 1)")
-    -- TODO(Phase 2): hook the Mods screen (see WB_ModsMenu.lua)
+local function WB_DetectApi()
+    -- real ZombieBuddy-exposed Java API?
+    if type(wbIsAvailable) == "function" then
+        local ok, res = pcall(wbIsAvailable)
+        if ok and res then return "java" end
+    end
+    -- fall back to the canned debug stub so the UI is verifiable in-game
+    if WB_Config.DEBUG_STUB then
+        require "WorkshopBridge/WB_DebugStub"
+        if WB_InstallDebugStub() then return "stub" end
+    end
+    return nil
 end
 
--- TODO(review): verify the best init event for menu-time Lua (OnGameBoot fires
--- at boot while client Lua is already live at the main menu).
-Events.OnGameBoot.Add(WB_OnInit)
+local function WB_Init()
+    WB_ApiKind = WB_DetectApi()
+    if not WB_ApiKind then
+        print("[WorkshopBridge] ZombieBuddy Java API not found and DEBUG_STUB is off.")
+        print("[WorkshopBridge] Install ZombieBuddy (see README), then enable this mod.")
+        return
+    end
+    WB_HookModsMenu()
+    print("[WorkshopBridge] initialised (api=" .. WB_ApiKind .. ")")
+end
+
+-- client Lua loads at the main menu, before any Mods screen exists, so
+-- deferring to OnGameBoot is safe; fall back to immediate init if missing.
+if Events.OnGameBoot then
+    Events.OnGameBoot.Add(WB_Init)
+else
+    WB_Init()
+end

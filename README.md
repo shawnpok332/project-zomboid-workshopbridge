@@ -6,7 +6,7 @@ A Lua UI in the Mods menu ("Update all", per-mod "Update") talks to a Java backe
 
 ## Status
 
-**Phase 1 — skeleton.** Repo structure, docs, and stub code are here for joint review. Nothing is functional yet. See [PLAN.md](PLAN.md) for the staged build plan.
+**Phase 2 — Lua UI in progress.** The UI is fully implemented against the Java contract in `docs/ARCHITECTURE.md`, with a built-in debug stub (`WB_DebugStub.lua`) that fakes the Java API so it can be verified in-game without building any Java. See [PLAN.md](PLAN.md).
 
 ## How it works (planned)
 

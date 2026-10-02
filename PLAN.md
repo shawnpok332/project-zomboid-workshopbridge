@@ -9,15 +9,19 @@ Staged plan agreed with shawnpok332. Each phase ends with a review checkpoint �
 - [x] steamcmd anonymous workshop downloads work for PZ app ID 108600; install paths and mod-folder layout confirmed.
 - [x] Prior art reviewed: `zomboid-mod-downloader`, `pz_launcher`, `pzmm`.
 
-## Phase 1 — Skeleton + joint review (in progress)
+## Phase 1 — Skeleton + joint review (done)
 
-- [x] Repo structure, docs, Lua stubs, Java stubs.
-- [ ] **Checkpoint:** review skeleton together. Open items to resolve:
-  1. B42 mod layout: is `42/media/java/WorkshopBridge.jar` + `javaJarFile` in mod.info correct? (per ZombieBuddy ModdingGuide; verify against a real B42 install)
-  2. mod.info fields: `require=\ZombieBuddy` syntax, `apiVersion`, `javaPkgName` — verify.
-  3. Mods-screen hook: exact screen/row class names for B42 (research pending).
-  4. License choice (MIT scaffolded — confirm).
-  5. **GOG ZombieBuddy install path**: GOG users must manually copy `ZombieBuddy.jar` + native lib and inject the `-agentlib:`/`-javaagent:` JVM flag. Our target users are GOG players, so this must be tested on a real GOG install and documented step-by-step.
+- [x] Repo structure, docs, Lua stubs, Java stubs. Reviewed in parallel with Phase 2 kickoff.
+- [x] Open items from research resolved via game decompile (see `docs/RESEARCH.md` §7).
+
+## Phase 2 — Lua UI (in progress)
+
+Open verification items (need a real B42 install):
+1. B42 mod layout: is `42/media/java/WorkshopBridge.jar` + `javaJarFile` in mod.info correct? (per ZombieBuddy ModdingGuide)
+2. mod.info fields: `require=\ZombieBuddy` syntax, `apiVersion`, `javaPkgName`.
+3. License choice (MIT scaffolded — confirm).
+4. **GOG ZombieBuddy install path**: GOG users must manually copy `ZombieBuddy.jar` + native lib and inject the `-agentlib:`/`-javaagent:` JVM flag. Our target users are GOG players, so this must be tested on a real GOG install and documented step-by-step.
+5. In-game UI verification (see checkpoint below): button placement, row badges, progress panel, ModInfoPanel layout.
 
 ## Phase 2 — Lua UI skeleton fill (after Phase 1 sign-off)
 
