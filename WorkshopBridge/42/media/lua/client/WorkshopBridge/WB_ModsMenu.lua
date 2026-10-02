@@ -170,14 +170,9 @@ local function WB_WrapRowDrawing(ms)
         _origDraw(lb, y, item, alt)
         local modId = item and WB_GetModId(item)
         if modId and WB_IsUpdateAvailable(modId) then
-            local text = WB_Text.UpdateAvailableBadge
-            local tm = getTextManager and getTextManager() or nil
-            local tw = 130
-            if tm and tm.MeasureStringX then
-                local ok, w = pcall(function() return tm:MeasureStringX(UIFont.Small, text) end)
-                if ok and w then tw = w end
-            end
-            lb:drawText(text, lb:getWidth() - tw - 10, y, 0.5, 1.0, 0.5, 1.0, UIFont.Small)
+            -- drawTextRight: right-aligned at x, no manual width measuring needed
+            lb:drawTextRight(WB_Text.UpdateAvailableBadge, lb:getWidth() - 10, y,
+                0.5, 1.0, 0.5, 1.0, UIFont.Small)
         end
     end
 end

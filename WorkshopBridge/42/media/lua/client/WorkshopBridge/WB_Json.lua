@@ -35,15 +35,36 @@ function WB_JsonDecode(s)
                     pos = pos + 4
                     local code = tonumber(hex, 16)
                     if not code then err("bad \\u escape") end
-                    -- BMP only (our data is ASCII-ish); surrogate pairs unlikely
+                    -- combine surrogate pairs; lone surrogates are an error
+                    if code >= 0xD800 and code <= 0xDBFF then
+                        local lo = nil
+                        if s:sub(pos, pos + 1) == "\\u" then
+                            lo = tonumber(s:sub(pos + 2, pos + 5), 16)
+                        end
+                        if lo and lo >= 0xDC00 and lo <= 0xDFFF then
+                            code = 0x10000 + (code - 0xD800) * 0x400 + (lo - 0xDC00)
+                            pos = pos + 6
+                        else
+                            err("lone high surrogate in \\u escape")
+                        end
+                    elseif code >= 0xDC00 and code <= 0xDFFF then
+                        err("lone low surrogate in \\u escape")
+                    end
+                    -- encode as UTF-8
                     if code < 0x80 then
                         out[#out + 1] = string.char(code)
                     elseif code < 0x800 then
                         out[#out + 1] = string.char(
                             0xC0 + math.floor(code / 64), 0x80 + (code % 64))
-                    else
+                    elseif code < 0x10000 then
                         out[#out + 1] = string.char(
                             0xE0 + math.floor(code / 4096),
+                            0x80 + (math.floor(code / 64) % 64),
+                            0x80 + (code % 64))
+                    else
+                        out[#out + 1] = string.char(
+                            0xF0 + math.floor(code / 262144),
+                            0x80 + (math.floor(code / 4096) % 64),
                             0x80 + (math.floor(code / 64) % 64),
                             0x80 + (code % 64))
                     end
@@ -61,7 +82,9 @@ function WB_JsonDecode(s)
         local num = s:match("^-?%d+%.?%d*[eE]?[+-]?%d*", pos)
         if not num or num == "" then err("bad number") end
         pos = pos + #num
-        return tonumber(num)
+        local n = tonumber(num)
+        if not n then err("bad number '" .. num .. "'") end
+        return n
     end
     local function parseArray()
         pos = pos + 1 -- [
@@ -113,5 +136,6 @@ function WB_JsonDecode(s)
     end
     local v = parseValue()
     skipWs()
+    if pos <= #s then err("trailing characters after JSON value") end
     return v
 end
