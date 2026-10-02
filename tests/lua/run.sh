@@ -15,6 +15,12 @@ LUA=""
 for c in lua lua5.4 lua5.3; do
     if command -v "$c" >/dev/null 2>&1; then LUA="$c"; break; fi
 done
+# fall back to this workspace's own Lua build (~/workspace/.tools)
+if [ -z "$LUA" ]; then
+    for t in "$HOME/workspace/.tools/lua-5.4.7/src/lua" "$HOME/workspace/.tools/lua/src/lua"; do
+        if [ -x "$t" ]; then LUA="$t"; break; fi
+    done
+fi
 if [ -z "$LUA" ]; then
     echo "No Lua interpreter found on PATH (tried lua, lua5.4, lua5.3)." >&2
     echo "Install one, e.g.: apt install lua5.4  |  brew install lua  |  https://www.lua.org/download.html" >&2
