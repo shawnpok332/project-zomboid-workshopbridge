@@ -19,7 +19,9 @@ import java.util.Map;
  */
 public final class WorkshopApi {
     private static final String DETAILS_URL =
-            "https://api.steampowered.com/ISteamRemoteStorage/GetPublishedFileDetails/v1/";
+            // system-property hook so tests can point at a local stub server
+            System.getProperty("workshopbridge.steamApiUrl",
+                    "https://api.steampowered.com/ISteamRemoteStorage/GetPublishedFileDetails/v1/");
 
     private static final HttpClient CLIENT = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(15))

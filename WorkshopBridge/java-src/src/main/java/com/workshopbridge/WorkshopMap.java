@@ -2,7 +2,10 @@ package com.workshopbridge;
 
 import java.io.File;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -106,7 +109,22 @@ public final class WorkshopMap {
             Map<String, Object> root = new LinkedHashMap<>();
             root.put("version", 1);
             root.put("items", itemsMap);
-            Files.writeString(file.toPath(), Json.stringify(root), StandardCharsets.UTF_8);
+            String json = Json.stringify(root);
+            // write-then-move: a crash mid-save must never leave a truncated
+            // map behind (that would silently orphan every tracked mod)
+            Path target = file.toPath();
+            Path tmp = target.resolveSibling(file.getName() + ".tmp");
+            Path parent = target.getParent();
+            if (parent != null) {
+                Files.createDirectories(parent);
+            }
+            Files.writeString(tmp, json, StandardCharsets.UTF_8);
+            try {
+                Files.move(tmp, target,
+                        StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+            } catch (AtomicMoveNotSupportedException e) {
+                Files.move(tmp, target, StandardCopyOption.REPLACE_EXISTING);
+            }
         } catch (Exception ex) {
             System.out.println("[WorkshopBridge] map save failed: " + ex);
         }

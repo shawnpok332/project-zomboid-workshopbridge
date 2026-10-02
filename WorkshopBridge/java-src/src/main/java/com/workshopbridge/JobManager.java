@@ -111,13 +111,18 @@ public final class JobManager {
             return;
         }
         List<String> withUpdates = new ArrayList<>();
+        List<String> missing = new ArrayList<>();
         int i = 0;
         for (String wsid : ids) {
             i++;
             job.done = i;
             Long tu = remote.get(wsid);
             WorkshopMap.Entry e = items.get(wsid);
-            if (tu != null && tu > e.timeUpdated) {
+            if (tu == null) {
+                // the API had no entry: item deleted or made private
+                missing.add(wsid);
+                job.message = "Checked " + i + "/" + ids.size();
+            } else if (tu > e.timeUpdated) {
                 withUpdates.addAll(e.modIds);
                 job.message = "Update available: " + wsid;
             } else {
@@ -126,9 +131,7 @@ public final class JobManager {
         }
         job.updates = withUpdates;
         job.done = ids.size();
-        job.message = withUpdates.isEmpty()
-                ? "Everything is up to date"
-                : withUpdates.size() + " mod(s) have updates";
+        job.message = checkSummary(withUpdates.size(), missing);
         job.state = State.DONE;
     }
 
@@ -143,15 +146,18 @@ public final class JobManager {
             return;
         }
         Map<String, Long> outdated = new LinkedHashMap<>();
+        List<String> missing = new ArrayList<>();
         for (String wsid : ids) {
             Long tu = remote.get(wsid);
-            if (tu != null && tu > items.get(wsid).timeUpdated) {
+            if (tu == null) {
+                missing.add(wsid);
+            } else if (tu > items.get(wsid).timeUpdated) {
                 outdated.put(wsid, tu);
             }
         }
         if (outdated.isEmpty()) {
             job.total = 0;
-            job.message = "Everything is up to date";
+            job.message = checkSummary(0, missing);
             job.state = State.DONE;
             return;
         }
@@ -168,7 +174,7 @@ public final class JobManager {
             }
             job.done = i;
         }
-        job.message = "All mods up to date";
+        job.message = "All mods up to date" + missingSuffix(missing);
         job.state = State.DONE;
     }
 
@@ -210,6 +216,24 @@ public final class JobManager {
         job.state = State.FAILED;
         job.error = t.getMessage() == null ? t.toString() : t.getMessage();
         System.out.println("[WorkshopBridge] job " + job.id + " (" + job.kind + ") failed: " + t);
+    }
+
+    // package-private for tests
+    static String checkSummary(int updateCount, List<String> missing) {
+        String base = updateCount == 0
+                ? "Everything is up to date"
+                : updateCount + " mod(s) have updates";
+        return base + missingSuffix(missing);
+    }
+
+    // package-private for tests
+    static String missingSuffix(List<String> missing) {
+        if (missing.isEmpty()) {
+            return "";
+        }
+        return "; " + missing.size()
+                + " workshop item(s) no longer listed (deleted or private?): "
+                + String.join(", ", missing);
     }
 
     private void prune() {

@@ -106,6 +106,13 @@ public final class SteamCmd {
             }
             String reason = validateExecutable(f.getAbsolutePath());
             if (reason != null) {
+                if (reason.startsWith("timed out")) {
+                    // probably a first-run self-update; the real download
+                    // completes it (same leniency as bootstrap())
+                    System.out.println("[WorkshopBridge] steamcmd.path validation timed out,"
+                            + " proceeding anyway (first-run self-update?): " + override);
+                    return f.getAbsolutePath();
+                }
                 overrideError = "steamcmd.path is not a working steamcmd (" + reason + "): " + override;
                 return null;
             }
