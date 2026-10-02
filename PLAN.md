@@ -1,6 +1,6 @@
 # WorkshopBridge build plan
 
-Staged plan agreed with shawnpok332. Each phase ends with a review checkpoint - we don't start the next phase until the previous one is signed off.
+Staged plan agreed with joshua. Each phase ends with a review checkpoint - we don't start the next phase until the previous one is signed off.
 
 ## Phase 0 - Validation (done)
 
@@ -14,34 +14,25 @@ Staged plan agreed with shawnpok332. Each phase ends with a review checkpoint - 
 - [x] Repo structure, docs, Lua stubs, Java stubs. Reviewed in parallel with Phase 2 kickoff.
 - [x] Open items from research resolved via game decompile (see `docs/RESEARCH.md` §7).
 
-## Phase 2 - Lua UI (in progress)
+## Phase 2 - Lua UI (done, verified in-game Oct 2026)
 
-Open verification items (need a real B42 install):
-1. B42 mod layout: is `42/media/java/WorkshopBridge.jar` + `javaJarFile` in mod.info correct? (per ZombieBuddy ModdingGuide)
-2. mod.info fields: `require=\ZombieBuddy` syntax, `apiVersion`, `javaPkgName`.
-3. License choice (MIT scaffolded - confirm).
-4. **GOG ZombieBuddy install path**: GOG users must manually copy `ZombieBuddy.jar` + native lib and inject the `-agentlib:`/`-javaagent:` JVM flag. Our target users are GOG players, so this must be tested on a real GOG install and documented step-by-step.
-5. In-game UI verification (see checkpoint below): button placement, row badges, progress panel, ModInfoPanel layout.
+- B42 mod layout confirmed against a real B42 ZombieBuddy mod: `common/mod.info` (`require=ZombieBuddy`, no backslash), `42/media/java/WorkshopBridge.jar`, `42/media/lua/...`.
+- In-game verification (42.20.4, debug stub): mod loads with no Lua errors, Check/Update-all buttons render bottom-right, per-mod Update button + three-state status label work, clicking Update flips the label to "Updating...".
+- Two real bugs found and fixed during verification: (1) `doDrawItem` wrapper dropped vanilla's return value -> black screen, `__sub not defined for operands` every frame; (2) buttons anchored left of the bottom-left Back button -> rendered offscreen. Both covered by regression tests in `tests/lua/`.
+- License: MIT scaffolded, not yet confirmed.
+- **GOG ZombieBuddy install path**: GOG users must manually copy `ZombieBuddy.jar` + native lib and inject the `-agentlib:`/`-javaagent:` JVM flag. Must be tested on a real GOG install and documented step-by-step. Currently blocked: see Phase 3.
 
-## Phase 2 - Lua UI skeleton fill (after Phase 1 sign-off)
+## Phase 3 - Java side (blocked on ZombieBuddy, Oct 2026)
 
-- Detect Java API presence; show "ZombieBuddy required" guidance when missing.
-- Hook the Mods screen: **Check for updates** + **Update all** buttons; per-row status text; per-mod **Update** button / three-state status label in ModInfoPanel.
-- Job polling UI: progress indicator (done/total/message from the job status) so long downloads/checks give visible feedback; errors surfaced, not silent.
-- [ ] **Checkpoint:** shawnpok332 verifies in-game (B42 + ZombieBuddy installed, Java stubs returning canned responses).
+**Blocker:** ZombieBuddy 2.3.2 does not load Java mods on PZ 42.21.0. The game changed `ZomboidFileSystem.loadMods(ArrayList<String>)` to `loadMods(List<String>)` and ZB's hook still matches the old signature ([zed-0xff/ZombieBuddy#53](https://github.com/zed-0xff/ZombieBuddy/issues/53)). [PR #56](https://github.com/zed-0xff/ZombieBuddy/pull/56) widens the hook to `List` (matches both 42.20 and 42.21) but is not yet confirmed in-game. Plan: joshua forks or builds from the PR, then we compile against the real `ZombieBuddy.jar` + PZ classes.
 
-## Phase 3 - Java side (in progress, started while shawnpok332 reinstalls)
-
-Implemented (uncompiled - needs ZombieBuddy.jar + PZ classes, see java-src/README):
+Implemented (compiled under JDK 17 with stubs, 19-check harness green with a fake steamcmd):
 - `SteamCmdApi` (Lua globals via `@LuaMethod(global=true)`), `Backend` (lazy singleton),
   `JobManager` (background jobs, JSON status), `WorkshopMap` (persisted JSON map),
-  `SteamCmd` (detection + `ProcessBuilder` downloads), `ModInstaller` (clean-replace
+  `SteamCmd` (explicit `steamcmd.path` config or managed bootstrap, no discovery; `ProcessBuilder` downloads), `ModInstaller` (clean-replace
   installs, `mod.info` id parsing), `WorkshopApi` (keyless `GetPublishedFileDetails`),
-  `Json` (minimal parser/writer), `Main` (load logging).
-- Lua contract updated: `wbGetJobStatus` returns a JSON string; new `WB_Json.lua`
-  decoder; debug stub mirrors the JSON contract.
-- Mod layout corrected to verified B42 form: `common/mod.info` (`require=ZombieBuddy`,
-  no backslash), `42/media/java/WorkshopBridge.jar`, `42/media/lua/...`.
+  `Json` (minimal parser/writer), `Net` (friendly network-failure messages), `Main` (load logging).
+- Lua contract: `wbGetJobStatus` returns a JSON string; `WB_Json.lua` decoder on the Lua side; debug stub mirrors the JSON contract. Round-trip verified with real Java output.
 
 Still to do together:
 - Compile against real ZombieBuddy.jar + PZ classes; fix any API drift.
@@ -61,6 +52,6 @@ Still to do together:
 
 ## Open questions (carried)
 
-- Exact B42 Mods-screen Lua hook (research in flight).
 - Whether pzmm-style scanners flag the JAR's `ProcessBuilder` usage at warn or block level - mitigations already planned (open source, signing, ZB approval dialog).
 - B41 support: out of scope (ZombieBuddy is B42-only). Revisit only if a B41-compatible loader emerges.
+- License choice: MIT scaffolded, not yet confirmed by joshua.

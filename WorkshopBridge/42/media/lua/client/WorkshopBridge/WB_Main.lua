@@ -12,6 +12,11 @@ local function WB_DetectApi()
         local ok, res = pcall(wbIsAvailable)
         if ok and res then return "java" end
     end
+    -- Note: on PZ 42.21.0 the API is absent even with ZB installed, because
+    -- ZB 2.3.2's loadMods hook misses the new List<String> signature
+    -- (zed-0xff/ZombieBuddy#53, fixed by PR #56). The stub fallback below
+    -- keeps the UI testable until then; it is not a substitute for the
+    -- real backend.
     -- fall back to the canned debug stub so the UI is verifiable in-game
     if WB_Config.DEBUG_STUB then
         require "WorkshopBridge/WB_DebugStub"

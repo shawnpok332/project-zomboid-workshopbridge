@@ -98,14 +98,14 @@ Jobs run on Java background threads. Lua never blocks waiting on them.
 - ZombieBuddy not installed → Lua detects `wbIsAvailable() == false` (globals missing) → Mods menu shows install guidance instead of Update buttons.
 - steamcmd not found → the Java side **bootstraps it automatically** from Valve's CDN into `Zomboid/workshop_cache/steamcmd/` (inside the download job, with progress). No system-wide discovery: either `steamcmd.path` in `Zomboid/workshopbridge.properties` (validated by execution, always wins) or the previously bootstrapped managed copy. `wbGetSteamCmdPath()` returns nil only when neither exists yet.
 
-## UI placement (B42)
+## UI placement (B42, verified in-game Oct 2026)
 
-- **Update all**: wrap `ModSelector:create`, anchor the `ISButton` to `self.backButton`.
-- **Check for updates**: a second button next to it. Explicit, non-destructive check - no automatic checking (avoids surprise downloads and slow menu opens).
+- **Update all** + **Check for updates**: wrapped `ModSelector:create`; the buttons join vanilla's bottom-right cluster (MapsOrder, ModsOrder, Accept), anchored right+bottom with the same font and sizing flags vanilla uses. (First attempt anchored them left of the Back button, which is bottom-left - they rendered offscreen.)
 - **Per-row**: wrap `ModListBox:doDrawItem` per instance; draw status text keyed by `item.modId`. Rows are not widget-composed, so no per-row buttons (would need manual hit-testing).
+- **Wrapper rule: always propagate return values.** Vanilla `prerender` does `v.height = y2 - y` where `y2 = self:doDrawItem(...)`; our first wrapper dropped the return and the menu rendered black with `__sub not defined for operands` thrown every frame. Wrapping a vanilla method means forwarding args AND returns.
 - **Per-mod Update button / status label**: `ModInfoPanel` - `createChildren()` once, `updateView(modInfo)` per selection.
 - Row states (three): in our map → "Update" (+ "Update available" badge after a check); game's `getWorkshopID()` non-empty → "Managed by Steam"; else grey "Unknown workshop ID".
-- Wrapping survives `reloadMods()` unless the list instance is recreated - verify in-game (Phase 2).
+- Wrapping is idempotent per instance and re-applied after `reloadMods()` (defensive re-hook in the update-all completion handler).
 
 ## Design constraints
 
