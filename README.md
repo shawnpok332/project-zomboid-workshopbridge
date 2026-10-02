@@ -4,7 +4,7 @@ Download and update Steam Workshop mods from inside Project Zomboid. Built for n
 
 A Lua UI in the Mods menu ("Check for updates", "Update all", per-mod "Update") talks to a Java backend (via [ZombieBuddy](https://github.com/zed-0xff/ZombieBuddy)) that runs `steamcmd`, moves downloaded mods into place, and remembers which workshop item each mod came from.
 
-In this doc, "the Zomboid folder" means your Zomboid **user** folder: `~/Zomboid` on Linux, `%USERPROFILE%\Zomboid` on Windows. That's where saves and mods live. It is not the game install folder (the one with `ProjectZomboid.jar`).
+In this doc, "the Zomboid folder" means the game's save/cache directory: `~/Zomboid` on Linux, `%USERPROFILE%\Zomboid` on Windows. That's where saves, mods, and logs live. It is not the game install folder (the one with `ProjectZomboid.jar`).
 
 ## Installation
 
