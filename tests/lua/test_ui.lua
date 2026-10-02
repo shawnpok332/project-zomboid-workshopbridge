@@ -38,6 +38,13 @@ function UIElement:getX() return self.x end
 function UIElement:getY() return self.y end
 function UIElement:setName(n) self.name = n end
 function UIElement:setTitle(t) self.title = t end
+function UIElement:setFont(f) self.font = f end
+function UIElement:setAnchorLeft(v) end
+function UIElement:setAnchorRight(v) end
+function UIElement:setAnchorTop(v) end
+function UIElement:setAnchorBottom(v) end
+function UIElement:ignoreWidthChange() end
+function UIElement:ignoreHeightChange() end
 function UIElement:drawText(...) end
 function UIElement:drawTextRight(...) end
 
@@ -66,6 +73,7 @@ local fakeModListPanel = { modList = fakeList }
 ModSelector = { instance = nil }
 function ModSelector.create(self)
     self.backButton = ISButton:new(880, 710, 120, 30, "Back", self, function() end)
+    self.mapOrderbtn = ISButton:new(700, 710, 100, 30, "MapsOrder", self, function() end)
     self.modListPanel = fakeModListPanel
 end
 function ModSelector:reloadMods() self.reloaded = (self.reloaded or 0) + 1 end

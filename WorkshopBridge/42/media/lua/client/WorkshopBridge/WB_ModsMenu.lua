@@ -141,12 +141,13 @@ end
 local function WB_AddMenuButtons(ms)
     if ms.wbButtonsAdded then return end
     ms.wbButtonsAdded = true
-    local bb = ms.backButton
-    if not bb then return end
-    -- provisional placement: two buttons left of the back button, same height
-    local bw, bh, gap = 150, bb:getHeight(), 10
-    local y = bb:getY()
-    local xUpdate = bb:getX() - gap - bw
+    -- vanilla's action cluster is bottom-right (MapsOrder, ModsOrder, Accept),
+    -- anchored right+bottom; ours join it on the left using the same pattern
+    local anchor = ms.mapOrderbtn or ms.modOrderbtn or ms.acceptButton
+    if not anchor then return end
+    local bw, bh, gap = 150, anchor:getHeight(), 10
+    local y = anchor:getY()
+    local xUpdate = anchor:getX() - gap - bw
     local xCheck = xUpdate - gap - bw
     ms.wbCheckBtn = ISButton:new(xCheck, y, bw, bh, WB_Text.CheckForUpdates, ms,
         function() WB_OnCheckAll(ms) end)
@@ -155,6 +156,13 @@ local function WB_AddMenuButtons(ms)
     for _, b in ipairs({ ms.wbCheckBtn, ms.wbUpdateAllBtn }) do
         b:initialise()
         b:instantiate()
+        b:setAnchorLeft(false)
+        b:setAnchorRight(true)
+        b:setAnchorTop(false)
+        b:setAnchorBottom(true)
+        b:setFont(UIFont.Small)
+        b:ignoreWidthChange()
+        b:ignoreHeightChange()
         ms:addChild(b)
     end
 end
