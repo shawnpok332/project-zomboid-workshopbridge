@@ -2,24 +2,38 @@
 
 Download and update Steam Workshop mods **from inside Project Zomboid** — built for non-Steam (GOG) players who can't use the Steam Workshop directly.
 
-A Lua UI in the Mods menu ("Update all", per-mod "Update") talks to a Java backend (via [ZombieBuddy](https://github.com/zed-0xff/ZombieBuddy)) that shells out to `steamcmd`, moves the downloaded mods into place, and remembers which workshop item each mod came from.
+A Lua UI in the Mods menu ("Check for updates", "Update all", per-mod "Update") talks to a Java backend (via [ZombieBuddy](https://github.com/zed-0xff/ZombieBuddy)) that runs `steamcmd`, moves downloaded mods into place, and remembers which workshop item each mod came from.
 
 ## Status
 
-**Phase 2 — Lua UI in progress.** The UI is fully implemented against the Java contract in `docs/ARCHITECTURE.md`, with a built-in debug stub (`WB_DebugStub.lua`) that fakes the Java API so it can be verified in-game without building any Java. See [PLAN.md](PLAN.md).
+Lua UI and Java backend are implemented. The Lua side is verified with an offline test rig (JSON decoder + full UI flow); the Java side compiles under JDK 17 and passes an offline harness with a fake steamcmd. Still ahead: in-game verification, real steamcmd end-to-end, release hardening. See [PLAN.md](PLAN.md).
 
-## How it works (planned)
+## Installation
 
-1. You open the Mods menu. Mods installed through WorkshopBridge show an **Update** button; anything else shows "Unknown workshop ID".
-2. **Update all** (or a single Update) asks the Java side to check the workshop for newer versions.
-3. Java runs `steamcmd +login anonymous +workshop_download_item 108600 <id> +quit` on a background thread, copies the result into `Zomboid/mods/`, and records the `workshopID → [modID]` mapping in `workshopbridge_map.json`.
-4. The Lua UI polls the background job and shows progress.
+1. **Install [ZombieBuddy](https://github.com/zed-0xff/ZombieBuddy)** (one-time). WorkshopBridge's Java backend loads through it. The mod tells you in-game if it's missing.
+2. **Copy the `WorkshopBridge` folder** from a release into your `Zomboid/mods/` directory, then enable it in the Mods menu like any other mod.
+3. **steamcmd** — you have two options:
+   - *Let the mod handle it:* on your first update, WorkshopBridge downloads Valve's official steamcmd into `Zomboid/workshop_cache/steamcmd/` automatically.
+   - *Use your own:* create `Zomboid/workshopbridge.properties` with one line:
+     ```
+     steamcmd.path=C:\path\to\steamcmd.exe
+     ```
+     The mod validates it by running `<exe> +quit`; if that fails it falls back to the managed copy.
+4. Launch the game. If you run with `-Dzomboid.steam=0` (GOG), everything works — WorkshopBridge never touches Steamworks.
 
-## Requirements (planned)
+## Usage
 
-- Project Zomboid **Build 42** (ZombieBuddy is B42-only)
-- [ZombieBuddy](https://github.com/zed-0xff/ZombieBuddy) installed (one-time setup; the mod detects its absence and tells you what to do)
-- `steamcmd` — auto-detected; the mod guides you to install it if missing
+- **Check for updates** scans the workshop for newer versions of your WorkshopBridge-tracked mods. Nothing happens automatically — checks only run when you ask, so a surprise update can't break your save.
+- **Update all (N)** downloads and installs every available update. Mods are replaced cleanly (stale files removed).
+- Each mod row shows its state: **Update** (tracked by WorkshopBridge), **Managed by Steam**, or **Unknown workshop ID**. Selecting a tracked mod shows a per-mod **Update** button.
+- Long operations show a progress panel with a throbber. If the network is down you'll get "Couldn't reach Steam's servers — check your internet connection" instead of a raw exception.
+
+## How it works
+
+1. **Update** asks the Java side to run `steamcmd +login anonymous +workshop_download_item 108600 <id> +quit` on a background thread.
+2. The downloaded mod is copied flat into `Zomboid/mods/<modID>/` (GOG's mod scan only looks one level deep, so nesting under a workshop-ID folder would hide it).
+3. The `workshopID → [modID]` mapping is persisted in `Zomboid/workshop_cache/workshopbridge_map.json`, which is what powers update checks.
+4. Update checks compare the workshop item's `time_updated` (via the Steam Web API) against the locally installed version.
 
 ## Docs
 
