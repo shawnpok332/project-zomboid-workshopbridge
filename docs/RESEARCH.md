@@ -46,6 +46,12 @@ Sources: [pz-modding-guide](https://github.com/cocolabs/pz-modding-guide) (Expos
 - [unjammer/PZ_Launcher](https://github.com/unjammer/PZ_Launcher) — launcher with SteamCMD workshop tab, GOG-aware. Windows-only.
 - [paraxaqq/pzmm](https://github.com/paraxaqq/pzmm) — mod manager with workshop browser + security scanner. Its scanner is why we plan signing + VirusTotal per release.
 
-## 6. UI hook (pending)
+## 6. Mods-screen UI hook (verified for B42)
 
-Main-menu button: `Events.OnMainMenuEnter` + `MainScreen.instance` (or wrap `MainScreen.create`). For this project we target the **Mods screen** instead — exact B42 screen/row class names under research.
+- Screen class: `ModSelector` (`ISPanelJoypad`), `media/lua/client/OptionScreens/ModSelector/`; singleton `ModSelector.instance`; opened via `MainScreen:onClickModList()`.
+- Rows are **drawn, not widget-composed**: `ModListBox:doDrawItem(y, item, alt)` renders each row; `item` is a `ModData` table with `item.modId` = the mod.info `id=`.
+- **No dedicated event** for the Mods screen — method-wrapping is the recipe: wrap `ModSelector:create` (add "Update all" anchored to `backButton`; per-instance `doDrawItem` wrap for row status text), wrap `ModInfoPanel:createChildren` + `updateView(modInfo)` (per-mod Update button / "Unknown workshop ID" label).
+- Design decision: status *text* in rows, the real per-mod Update *button* in `ModInfoPanel` (per-row buttons would need manual hit-testing).
+- Bonus: engine Java `ChooseGameInfo.Mod.getWorkshopID()` exists but is empty for non-Steam mods — our Java-side map stays authoritative.
+- Verify in-game (Phase 2): whether `reloadMods()` recreates the `ModListBox` instance; `ModInfoPanel` geometry; B41 screen class unknown (out of scope — B42-only project).
+- Sources: [PZ-Umbrella type stubs](https://github.com/PZ-Umbrella/Umbrella/tree/master/library/lua/client/OptionScreens/ModSelector) (mirror the vanilla B42 Lua tree), [ChooseGameInfo.Mod Javadocs](https://projectzomboid.com/modding/zombie/gameStates/ChooseGameInfo.Mod.html).

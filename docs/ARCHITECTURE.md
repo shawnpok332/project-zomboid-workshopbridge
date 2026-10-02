@@ -93,6 +93,13 @@ Jobs run on Java background threads. Lua never blocks waiting on them.
 - ZombieBuddy not installed → Lua detects `wbIsAvailable() == false` (globals missing) → Mods menu shows install guidance instead of Update buttons.
 - steamcmd not found → `wbGetSteamCmdPath()` returns nil → UI shows "steamcmd not found" with install instructions (Windows: unzip Valve's `steamcmd.zip`; Linux: tarball + 32-bit libs).
 
+## UI placement (B42)
+
+- **Update all**: wrap `ModSelector:create`, anchor the `ISButton` to `self.backButton`.
+- **Per-row**: wrap `ModListBox:doDrawItem` per instance; draw status text keyed by `item.modId`. Rows are not widget-composed, so no per-row buttons (would need manual hit-testing).
+- **Per-mod Update button / "Unknown workshop ID" label**: `ModInfoPanel` — `createChildren()` once, `updateView(modInfo)` per selection.
+- Wrapping survives `reloadMods()` unless the list instance is recreated — verify in-game (Phase 2).
+
 ## Design constraints
 
 - **B42 only** (ZombieBuddy requirement).
