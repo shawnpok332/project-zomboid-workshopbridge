@@ -79,6 +79,11 @@ Jobs run on Java background threads. Lua never blocks waiting on them.
 
 ## Flows
 
+### Check for updates
+1. Lua: **Check for updates** button → `wbCheckForUpdates()` → jobId.
+2. Java: for each mapped workshop item, `GetPublishedFileDetails` → compare `time_updated` vs stored `timeUpdated`. No downloads.
+3. Lua polls; on completion, rows with available updates show an "Update available" badge, and **Update all** becomes "Update all (n)".
+
 ### Single mod update
 1. Lua: row button → `wbGetWorkshopId(modId)` → `wbUpdateMod(workshopId)` → jobId.
 2. Lua polls `wbGetJobStatus(jobId)` on tick, shows progress on the row.
@@ -96,8 +101,10 @@ Jobs run on Java background threads. Lua never blocks waiting on them.
 ## UI placement (B42)
 
 - **Update all**: wrap `ModSelector:create`, anchor the `ISButton` to `self.backButton`.
+- **Check for updates**: a second button next to it. Explicit, non-destructive check — no automatic checking (avoids surprise downloads and slow menu opens).
 - **Per-row**: wrap `ModListBox:doDrawItem` per instance; draw status text keyed by `item.modId`. Rows are not widget-composed, so no per-row buttons (would need manual hit-testing).
-- **Per-mod Update button / "Unknown workshop ID" label**: `ModInfoPanel` — `createChildren()` once, `updateView(modInfo)` per selection.
+- **Per-mod Update button / status label**: `ModInfoPanel` — `createChildren()` once, `updateView(modInfo)` per selection.
+- Row states (three): in our map → "Update" (+ "Update available" badge after a check); game's `getWorkshopID()` non-empty → "Managed by Steam"; else grey "Unknown workshop ID".
 - Wrapping survives `reloadMods()` unless the list instance is recreated — verify in-game (Phase 2).
 
 ## Design constraints

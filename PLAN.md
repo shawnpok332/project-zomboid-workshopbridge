@@ -22,8 +22,8 @@ Staged plan agreed with shawnpok332. Each phase ends with a review checkpoint �
 ## Phase 2 — Lua UI skeleton fill (after Phase 1 sign-off)
 
 - Detect Java API presence; show "ZombieBuddy required" guidance when missing.
-- Hook the Mods screen: add **Update all** button; per-row **Update** button or grey **"Unknown workshop ID"** label.
-- Job polling UI (progress state per `docs/ARCHITECTURE.md`).
+- Hook the Mods screen: **Check for updates** + **Update all** buttons; per-row status text; per-mod **Update** button / three-state status label in ModInfoPanel.
+- Job polling UI: progress indicator (done/total/message from the job status) so long downloads/checks give visible feedback; errors surfaced, not silent.
 - [ ] **Checkpoint:** shawnpok332 verifies in-game (B42 + ZombieBuddy installed, Java stubs returning canned responses).
 
 ## Phase 3 — Java side (together, after Phase 2 sign-off)
@@ -33,7 +33,7 @@ Staged plan agreed with shawnpok332. Each phase ends with a review checkpoint �
 - Download flow: `+force_install_dir` to a cache dir → `+login anonymous` → `+workshop_download_item 108600 <id>` → `+quit`; move `mods/*` into `Zomboid/mods/` (replace existing); update map from `mod.info` `id=` lines.
 - Update check: keyless `ISteamRemoteStorage/GetPublishedFileDetails` → compare `time_updated` vs stored; download only when newer.
 - `JobManager`: background jobs with pollable status; cancellation.
-- Edge cases: workshop item with multiple mods; workshop item deleted; steamcmd missing 32-bit libs on Linux; anonymous login rejected → account-login fallback (interactive, never store credentials); Steam Guard UX.
+- Edge cases: workshop item with multiple mods; workshop item deleted; steamcmd missing 32-bit libs on Linux; anonymous login rejected → account-login fallback (interactive, never store credentials); Steam Guard UX; read the game's own `ChooseGameInfo.getModDetails(modId).getWorkshopID()` as a supplementary "Managed by Steam" signal.
 - [ ] **Checkpoint:** end-to-end test — install a small workshop mod, then update it.
 
 ## Phase 4 — Harden + release (after Phase 3)

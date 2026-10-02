@@ -46,6 +46,16 @@ Sources: [pz-modding-guide](https://github.com/cocolabs/pz-modding-guide) (Expos
 - [unjammer/PZ_Launcher](https://github.com/unjammer/PZ_Launcher) — launcher with SteamCMD workshop tab, GOG-aware. Windows-only.
 - [paraxaqq/pzmm](https://github.com/paraxaqq/pzmm) — mod manager with workshop browser + security scanner. Its scanner is why we plan signing + VirusTotal per release.
 
+## 7. Built-in workshop code: not reusable (decompile analysis)
+
+Source: game decompile (`gameStates/ConnectToServerState.java`, `core/znet/SteamWorkshop.java`, `gameStates/ChooseGameInfo.java`, `ZomboidFileSystem.java`).
+
+- The `item.update()` the user spotted is the **multiplayer server-join flow**: the server sends required workshop item IDs + timestamps, the client subscribes/downloads them via Steamworks native calls (`SubscribeItem`, `DownloadItem`, `CreateQueryUGCDetailsRequest`, `GetItemState`). It is server-driven and fully automatic — the "break mods if you aren't careful" shape.
+- Everything hangs off `SteamWorkshop.instance`, which only initializes when `-Dzomboid.steam=1` (`SteamUtils.isSteamModeEnabled()`; `SteamUtils.java:39`). With `-Dzomboid.steam=0` (GOG) the entire built-in workshop machinery is dead code. **Verdict: do not reuse/patch; the steamcmd approach stands.**
+- The per-mod `workshopId` storage (`ChooseGameInfo.Mod`, line 477) is **derived from directory layout, not stored anywhere**: grandparent dir of the mod folder must be numeric (`SteamUtils.isValidSteamID`) → `workshopId = dirName`, `source = "Steam"`. The folder sources producing such layouts (`getInstalledItemModsFolders` → `steamapps/workshop/content/108600/<wsID>/mods`, `getStagedItemModsFolders`) are likewise Steam-gated.
+- On GOG the only live mod source is the flat `Zomboid/mods` scan, which is **one level deep** (`getAllModFoldersAux`). Installing nested as `Zomboid/mods/<wsID>/<modID>/` would make mods **invisible to the game**. So we keep our own `workshopbridge_map.json`.
+- Useful residue: our Java side can still *read* `ChooseGameInfo.getModDetails(modId).getWorkshopID()` as a supplementary signal — three-state row UI: in our map → "Update"; game's ID non-empty → "Managed by Steam"; else → "Unknown workshop ID".
+
 ## 6. Mods-screen UI hook (verified for B42)
 
 - Screen class: `ModSelector` (`ISPanelJoypad`), `media/lua/client/OptionScreens/ModSelector/`; singleton `ModSelector.instance`; opened via `MainScreen:onClickModList()`.
