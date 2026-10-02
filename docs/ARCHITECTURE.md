@@ -31,17 +31,17 @@
 
 ## Lua ↔ Java contract (planned)
 
-Exposed as **plain Lua globals** (`wbIsAvailable()` etc.) — Phase 3 must honor
+Exposed as **plain Lua globals** (`wbIsAvailable()` etc.) - Phase 3 must honor
 these exact names, e.g. via `@LuaMethod(name = "wbIsAvailable", global = true)`.
 
 | Function | Args | Returns |
 |---|---|---|
-| `wbIsAvailable()` | — | `true` when the Java side loaded (Lua uses this to detect ZombieBuddy presence) |
-| `wbGetSteamCmdPath()` | — | path string, or `nil` if not detected |
+| `wbIsAvailable()` | - | `true` when the Java side loaded (Lua uses this to detect ZombieBuddy presence) |
+| `wbGetSteamCmdPath()` | - | path string, or `nil` if not detected |
 | `wbGetWorkshopId(modId)` | PZ mod id (`mod.info` `id=`) | workshop ID string, or `nil` = "Unknown workshop ID" |
-| `wbCheckForUpdates()` | — | starts a job; returns jobId. A done status carries `updates` = list of **modIds** with updates available |
+| `wbCheckForUpdates()` | - | starts a job; returns jobId. A done status carries `updates` = list of **modIds** with updates available |
 | `wbUpdateMod(workshopId)` | workshop ID | jobId |
-| `wbUpdateAll()` | — | jobId (checks, then downloads only outdated items) |
+| `wbUpdateAll()` | - | jobId (checks, then downloads only outdated items) |
 | `wbGetJobStatus(jobId)` | jobId | **JSON string** `{"state","done","total","message"[,"error"][,"updates"]}`, or null for unknown jobs. Lua decodes it with the pure-Lua `WB_Json.lua` (Kahlua's Java return marshaling is deliberately not relied upon). A done check-job carries `updates` = list of **modIds** with updates available |
 
 ### Job status shape (JSON string, decoded in Lua by WB_Json)
@@ -73,7 +73,7 @@ Jobs run on Java background threads. Lua never blocks waiting on them.
 ```
 
 - Written only by the Java side, after a successful download+move.
-- `modIds` parsed from each downloaded `mod.info` (`id=` line). A workshop item can contain multiple mods — hence the list.
+- `modIds` parsed from each downloaded `mod.info` (`id=` line). A workshop item can contain multiple mods - hence the list.
 - Reverse lookup (modID → workshopID) is derived by inverting the map in memory.
 - `timeUpdated` comes from `GetPublishedFileDetails`; compared against the workshop on update checks.
 
@@ -101,15 +101,15 @@ Jobs run on Java background threads. Lua never blocks waiting on them.
 ## UI placement (B42)
 
 - **Update all**: wrap `ModSelector:create`, anchor the `ISButton` to `self.backButton`.
-- **Check for updates**: a second button next to it. Explicit, non-destructive check — no automatic checking (avoids surprise downloads and slow menu opens).
+- **Check for updates**: a second button next to it. Explicit, non-destructive check - no automatic checking (avoids surprise downloads and slow menu opens).
 - **Per-row**: wrap `ModListBox:doDrawItem` per instance; draw status text keyed by `item.modId`. Rows are not widget-composed, so no per-row buttons (would need manual hit-testing).
-- **Per-mod Update button / status label**: `ModInfoPanel` — `createChildren()` once, `updateView(modInfo)` per selection.
+- **Per-mod Update button / status label**: `ModInfoPanel` - `createChildren()` once, `updateView(modInfo)` per selection.
 - Row states (three): in our map → "Update" (+ "Update available" badge after a check); game's `getWorkshopID()` non-empty → "Managed by Steam"; else grey "Unknown workshop ID".
-- Wrapping survives `reloadMods()` unless the list instance is recreated — verify in-game (Phase 2).
+- Wrapping survives `reloadMods()` unless the list instance is recreated - verify in-game (Phase 2).
 
 ## Design constraints
 
 - **B42 only** (ZombieBuddy requirement).
 - **Zero bytecode patches**: we use only ZombieBuddy's Lua-exposure surface, its most stable API.
 - **Never store Steam credentials.** Anonymous steamcmd login is the default; if it's ever rejected, fall back to an interactive user login (Steam Guard via the user's own terminal), never persisted.
-- **Mods load at game start** — updating files while sitting in the Mods menu is safe; changes apply on next new game / continue.
+- **Mods load at game start** - updating files while sitting in the Mods menu is safe; changes apply on next new game / continue.
