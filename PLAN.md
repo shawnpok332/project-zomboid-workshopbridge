@@ -70,6 +70,21 @@ planned properly.
     `buildControls()`. **Needs in-game verification** - copy the new Lua and
     confirm the panel appears on Download/Update-all.
 
+- [ ] **Per-mod "Updating..." label stuck / cleared on selection change (bug).**
+  Clicking a mod's Update button shows "Updating...", but it does not clear
+  when the job finishes. Additionally, selecting another mod and coming back
+  always clears the label, even if that mod's job is still running
+  (`updateView`/`WB_RefreshModPanel` knows nothing about in-flight jobs).
+  Fix direction: track in-progress update jobs per mod id
+  (`WB_UpdatingMods[modId] = jobId`, cleared on job done/fail) and have
+  `WB_RefreshModPanel` render "Updating..." (or the job's latest message)
+  for those mods. For the stuck case specifically: add console logging when
+  the per-mod `onDone` fires, reproduce in-game, and check whether the
+  callback runs at all - the label update may be lost to a stale panel
+  reference or a swallowed `pcall` error.
+  (The "check/update-all seem to do nothing" report is the progress-panel
+  bug above - same root cause, fixed pending verification.)
+
 - [ ] **Mod menu UI refresh without restart/lua reload.** After an
   install/update, the Mods menu list should reflect the change. We already
   call `ms:reloadMods()` on completion; verify in-game whether the visible

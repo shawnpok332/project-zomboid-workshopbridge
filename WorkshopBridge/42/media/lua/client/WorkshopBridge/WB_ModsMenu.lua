@@ -56,6 +56,7 @@ local function WB_OnCheckAll(ms)
         WB_FlashMessage(ms, WB_Text.CheckFailed)
         return
     end
+    print("[WorkshopBridge] check for updates started (job " .. tostring(jobId) .. ")")
     WB_TrackJob(jobId, {
         onUpdate = function(st)
             WB_ShowProgress(ms, st.message or WB_Text.Checking)
@@ -72,7 +73,12 @@ local function WB_OnCheckAll(ms)
             end
             WB_RefreshUpdateAllButton(ms, n)
             if st and st.state == "failed" then
+                print("[WorkshopBridge] check for updates failed: "
+                    .. tostring(st.error or "?"))
                 WB_ShowError(ms, WB_Text.CheckFailed .. ": " .. WB_ShortError(st.error, 64))
+            else
+                print("[WorkshopBridge] check for updates complete: "
+                    .. n .. " update(s) available")
             end
         end,
     })
@@ -85,6 +91,7 @@ local function WB_OnUpdateAll(ms)
         WB_FlashMessage(ms, WB_Text.UpdateFailed)
         return
     end
+    print("[WorkshopBridge] update-all started (job " .. tostring(jobId) .. ")")
     WB_TrackJob(jobId, {
         onUpdate = function(st)
             WB_ShowProgress(ms, st.message or WB_Text.Updating)
@@ -94,8 +101,10 @@ local function WB_OnUpdateAll(ms)
             WB_ClearUpdateAvailable()
             WB_RefreshUpdateAllButton(ms, 0)
             if st and st.state == "failed" then
+                print("[WorkshopBridge] update-all failed: " .. tostring(st.error or "?"))
                 WB_ShowError(ms, WB_Text.UpdateFailed .. ": " .. WB_ShortError(st.error, 64))
             else
+                print("[WorkshopBridge] update-all complete")
                 -- rescan so newly downloaded/changed mods appear; then make
                 -- sure our row wrap survived (re-applied defensively)
                 if ms.reloadMods then pcall(function() ms:reloadMods() end) end
@@ -115,15 +124,20 @@ local function WB_OnModUpdate(panel)
         return
     end
     WB_SetLabel(panel.wbStatusLabel, WB_Text.Updating)
+    print("[WorkshopBridge] updating " .. tostring(modId)
+        .. " (workshop " .. tostring(wsid) .. ", job " .. tostring(jobId) .. ")")
     WB_TrackJob(jobId, {
         onUpdate = function(st)
             WB_SetLabel(panel.wbStatusLabel, st.message or WB_Text.Updating)
         end,
         onDone = function(st)
             if st and st.state == "failed" then
+                print("[WorkshopBridge] update of " .. tostring(modId)
+                    .. " failed: " .. tostring(st.error or "?"))
                 WB_SetLabel(panel.wbStatusLabel,
                     WB_Text.UpdateFailed .. ": " .. WB_ShortError(st.error, 48))
             else
+                print("[WorkshopBridge] update of " .. tostring(modId) .. " complete")
                 WB_SetLabel(panel.wbStatusLabel, WB_Text.UpToDate)
                 WB_UnmarkUpdateAvailable(modId)
             end

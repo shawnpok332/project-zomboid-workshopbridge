@@ -68,6 +68,8 @@ function WB_DownloadDialog:onDownloadClicked()
         WB_FlashMessage(ms, WB_Text.DownloadFailed)
         return
     end
+    print("[WorkshopBridge] download started for workshop item " .. tostring(wsid)
+        .. " (job " .. tostring(jobId) .. ")")
     WB_TrackJob(jobId, {
         onUpdate = function(st)
             WB_ShowProgress(ms, st.message or WB_Text.Downloading)
@@ -75,9 +77,12 @@ function WB_DownloadDialog:onDownloadClicked()
         onDone = function(st)
             WB_HideProgress()
             if st and st.state == "failed" then
+                print("[WorkshopBridge] download of " .. tostring(wsid)
+                    .. " failed: " .. tostring(st.error or "?"))
                 WB_ShowError(ms,
                     WB_Text.DownloadFailed .. ": " .. WB_ShortError(st.error, 64))
             else
+                print("[WorkshopBridge] download of " .. tostring(wsid) .. " complete")
                 WB_FlashMessage(ms, WB_Text.Downloaded)
                 -- rescan so the new mod shows up; then make sure our
                 -- menu hooks survived (re-applied defensively)
