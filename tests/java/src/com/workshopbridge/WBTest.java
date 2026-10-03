@@ -9,6 +9,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Consumer;
 
 /**
  * Offline test harness. Run with:
@@ -154,7 +155,63 @@ public class WBTest {
         // ---- 7. unknown job ----
         check(jobs.statusJson("no-such-job") == null, "unknown job -> null");
 
-        // ---- 8. installArchive handles a real tar.gz ----
+        // ---- 9. interrupted-install recovery ----
+        File modsDir = backend.modsDir();
+        Consumer<String> quiet = s -> {};
+        // case A: crash between the two renames -> complete forward
+        File victimOld = new File(modsDir, "VictimMod.old-aaa");
+        File victimNew = new File(modsDir, "VictimMod.new-aaa");
+        writeFile(new File(victimOld, "common/mod.info"), "id=VictimMod\n");
+        writeFile(new File(victimNew, "common/mod.info"), "id=VictimMod\n");
+        writeFile(new File(victimNew, "newfile.txt"), "new");
+        ModInstaller.recoverInterruptedInstalls(modsDir.toPath(), quiet);
+        check(new File(modsDir, "VictimMod/newfile.txt").isFile(),
+                "mid-swap crash completes forward");
+        check(!victimOld.exists() && !victimNew.exists(), "mid-swap leftovers cleaned");
+        // case B: backup left after a completed swap -> dropped, live tree kept
+        File staleLive = new File(modsDir, "StaleMod");
+        writeFile(new File(staleLive, "keep.txt"), "keep");
+        File staleOld = new File(modsDir, "StaleMod.old-bbb");
+        writeFile(new File(staleOld, "old.txt"), "old");
+        ModInstaller.recoverInterruptedInstalls(modsDir.toPath(), quiet);
+        check(new File(staleLive, "keep.txt").isFile() && !staleOld.exists(),
+                "post-swap backup cleaned");
+        // case C: partial staging from a copy-phase crash -> dropped
+        File partialLive = new File(modsDir, "PartialMod");
+        writeFile(new File(partialLive, "keep.txt"), "keep");
+        File partialNew = new File(modsDir, "PartialMod.new-ccc");
+        writeFile(new File(partialNew, "partial.txt"), "partial");
+        ModInstaller.recoverInterruptedInstalls(modsDir.toPath(), quiet);
+        check(new File(partialLive, "keep.txt").isFile() && !partialNew.exists(),
+                "partial staging dropped");
+
+        // ---- 10. reinstall clean-replaces through the atomic swap ----
+        File scratch = Files.createTempDirectory("wb-scratch").toFile();
+        File itemV1 = new File(scratch, "itemV1/mods/ReMod");
+        writeFile(new File(itemV1, "common/mod.info"), "id=ReMod\n");
+        writeFile(new File(itemV1, "old.txt"), "v1");
+        ModInstaller.install(new File(scratch, "itemV1"), modsDir, quiet);
+        check(new File(modsDir, "ReMod/old.txt").isFile(), "v1 installed");
+        File itemV2 = new File(scratch, "itemV2/mods/ReMod");
+        writeFile(new File(itemV2, "common/mod.info"), "id=ReMod\n");
+        writeFile(new File(itemV2, "new.txt"), "v2");
+        List<String> ids = ModInstaller.install(new File(scratch, "itemV2"), modsDir, quiet);
+        File reMod = new File(modsDir, "ReMod");
+        check(new File(reMod, "new.txt").isFile() && !new File(reMod, "old.txt").exists(),
+                "reinstall clean-replaces (stale files gone)");
+        check(ids.equals(List.of("ReMod")), "install returns mod ids", ids);
+        boolean leftovers = false;
+        File[] modEntries = modsDir.listFiles();
+        if (modEntries != null) {
+            for (File f : modEntries) {
+                if (f.getName().contains(".new-") || f.getName().contains(".old-")) {
+                    leftovers = true;
+                }
+            }
+        }
+        check(!leftovers, "no staging dirs left after install");
+
+        // ---- 11. installArchive handles a real tar.gz ----
         File tgzDir = Files.createTempDirectory("wb-tgz").toFile();
         File contentDir = new File(tgzDir, "content");
         contentDir.mkdirs();
@@ -172,5 +229,10 @@ public class WBTest {
 
         System.out.println(failures == 0 ? "ALL TESTS PASSED" : failures + " FAILURES");
         System.exit(failures == 0 ? 0 : 1);
+    }
+
+    static void writeFile(File f, String content) throws Exception {
+        f.getParentFile().mkdirs();
+        Files.writeString(f.toPath(), content, StandardCharsets.UTF_8);
     }
 }
