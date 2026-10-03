@@ -18,10 +18,18 @@ import java.util.Map;
  * No API key required for this endpoint.
  */
 public final class WorkshopApi {
-    private static final String DETAILS_URL =
-            // system-property hook so tests can point at a local stub server
-            System.getProperty("workshopbridge.steamApiUrl",
-                    "https://api.steampowered.com/ISteamRemoteStorage/GetPublishedFileDetails/v1/");
+    /**
+     * Steam Web API endpoint, overridable via the
+     * {@code workshopbridge.steamApiUrl} system property so tests can point
+     * at a local stub server. Read per call, not cached at class-load: the
+     * test suite parses fixtures through {@link #parseTimeUpdated} before it
+     * sets the property, and a frozen URL would silently send every stubbed
+     * check at the real Steam API.
+     */
+    private static String detailsUrl() {
+        return System.getProperty("workshopbridge.steamApiUrl",
+                "https://api.steampowered.com/ISteamRemoteStorage/GetPublishedFileDetails/v1/");
+    }
 
     private static final HttpClient CLIENT = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(15))
@@ -42,7 +50,7 @@ public final class WorkshopApi {
             body.append("&publishedfileids%5B").append(i).append("%5D=")
                     .append(URLEncoder.encode(workshopIds.get(i), StandardCharsets.UTF_8));
         }
-        final String raw = postForm(DETAILS_URL, body.toString());
+        final String raw = postForm(detailsUrl(), body.toString());
         try {
             return parseTimeUpdated(raw);
         } catch (IllegalArgumentException e) {

@@ -187,9 +187,12 @@ public class WBTest {
             try (OutputStream os = ex.getResponseBody()) { os.write(b); }
         });
         api.start();
-        // WorkshopApi reads its URL once, at class-load time: point it at the
-        // stub before its first use. Binding port 0 above means run.sh needs
-        // no free-port hack (and no python3).
+        // WorkshopApi reads the steamApiUrl property on every call (deliberately
+        // not cached at class-load: the fixture test above already exercised
+        // WorkshopApi.parseTimeUpdated, which would otherwise freeze the URL
+        // to the real Steam API and send every "stubbed" check at real
+        // workshop items). Binding port 0 above means run.sh needs no
+        // free-port hack (and no python3).
         System.setProperty("workshopbridge.steamApiUrl",
                 "http://127.0.0.1:" + apiPort + "/");
         JobManager jobs = new JobManager(backend);
@@ -477,12 +480,17 @@ public class WBTest {
         check(new File(exe).isFile() && new File(exe).canExecute(), "installArchive extracts tar.gz", exe);
 
         // ---- 12. 32-bit hint fires on the classic failure signatures ----
+        // (pass the nixos flag explicitly: the 1-arg overload sniffs the real
+        // OS, so on NixOS these take the steam-run branch instead)
         check(SteamCmd.missing32BitHint(
-                "did not identify as steamcmd (exit=127, output: .../linux32/steamcmd: No such file or directory)")
-                .contains("32-bit"), "32-bit hint on exit=127");
+                "did not identify as steamcmd (exit=127, output: .../linux32/steamcmd: No such file or directory)",
+                false).contains("32-bit"), "32-bit hint on exit=127");
         check(SteamCmd.missing32BitHint(
-                "error while loading shared libraries: libstdc++.so.6: cannot open shared object file")
-                .contains("32-bit"), "32-bit hint on shared libraries");
+                "error while loading shared libraries: libstdc++.so.6: cannot open shared object file",
+                false).contains("32-bit"), "32-bit hint on shared libraries");
+        check(SteamCmd.missing32BitHint(
+                "did not identify as steamcmd (exit=127)", true).contains("steam-run"),
+                "NixOS exit=127 hint names steam-run");
         check(SteamCmd.missing32BitHint(
                 "did not identify as steamcmd (exit=1, output: nope)").isEmpty(),
                 "no 32-bit hint for other failures");
