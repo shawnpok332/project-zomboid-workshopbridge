@@ -55,3 +55,42 @@ Still to do together:
 - Whether pzmm-style scanners flag the JAR's `ProcessBuilder` usage at warn or block level - mitigations already planned (open source, signing, ZB approval dialog).
 - B41 support: out of scope (ZombieBuddy is B42-only). Revisit only if a B41-compatible loader emerges.
 - License choice: MIT scaffolded, not yet confirmed by joshua.
+
+## Backlog (from live testing, Oct 2026)
+
+New scope goes here, not into the phases above, until it is picked up and
+planned properly.
+
+- [ ] **Progress/feedback UI never renders in-game (bug, high priority).**
+  Clicking Download (dialog closes), per-mod Update, or Update-all shows no
+  progress UI at all, although the jobs themselves run fine (verified: real
+  download + install completed). The panel + sticky-error paths work in the
+  stubbed Lua tests, so this is in-game-only. Hypotheses: (a) a Lua error in
+  the panel path, silently swallowed by the `pcall` around `cb.onUpdate` in
+  `WB_PollJobs`; (b) the panel is added but doesn't render (z-order,
+  `ISPanel:derive` behavior in B42, label issue). Diagnostic: temporarily log
+  `pcall` failures in `WB_PollJobs` and add console prints to
+  `WB_ShowProgress`, reproduce in-game, read the console. Then fix for real.
+
+- [ ] **Mod menu UI refresh without restart/lua reload.** After an
+  install/update, the Mods menu list should reflect the change. We already
+  call `ms:reloadMods()` on completion; verify in-game whether the visible
+  list actually refreshes, and if not find the right refresh hook (the game
+  may cache the mod list per screen open). Related to the progress-UI bug
+  above only in that both are "did anything happen?" UX.
+
+- [ ] **Mod dependencies.** When downloading/updating a mod, detect required
+  workshop items and offer to install them too. Example: `3799732653`
+  depends on `3171167894`. Open mechanism: Steam's `GetPublishedFileDetails`
+  has no dependencies field, so investigate sources (workshop page
+  "Required items" section, SteamKit, ...). Then: Java resolves the dep
+  list, Lua prompts (install-all vs pick), jobs install each dep like a
+  normal download.
+
+- [ ] **"Open in Workshop" button.** Per-mod button opening the item's
+  workshop page in the system browser. Lua can't launch browsers (Kahlua has
+  no `os.execute`), so this is a Java-side `ProcessBuilder`
+  (`xdg-open` / `cmd /c start` / `open`) behind a new Lua global, e.g.
+  `wbOpenWorkshopPage(workshopId)`. Show only when a workshop id is known
+  (tracked by us or Steam-managed). Mind the posix_spawn/FORK situation on
+  the spawn path.
