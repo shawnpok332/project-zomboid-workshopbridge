@@ -59,12 +59,16 @@ planned properly.
   Clicking Download (dialog closes), per-mod Update, or Update-all shows no
   progress UI at all, although the jobs themselves run fine (verified: real
   download + install completed). The panel + sticky-error paths work in the
-  stubbed Lua tests, so this is in-game-only. Hypotheses: (a) a Lua error in
-  the panel path, silently swallowed by the `pcall` around `cb.onUpdate` in
-  `WB_PollJobs`; (b) the panel is added but doesn't render (z-order,
-  `ISPanel:derive` behavior in B42, label issue). Diagnostic: temporarily log
-  `pcall` failures in `WB_PollJobs` and add console prints to
-  `WB_ShowProgress`, reproduce in-game, read the console. Then fix for real.
+  stubbed Lua tests, so this is in-game-only.
+  - **Root cause found Oct 2026** (vanilla `ISUI` sources): PZ's
+    `ISUIElement:instantiate()` calls `self:createChildren()` itself, but our
+    `WB_ProgressPanel` also called it from `initialise()`, and we called
+    `instantiate()` explicitly on top: the panel was built three times with
+    discarded Java peers and never rendered. Fixed by building a plain
+    `ISPanel` exactly like the working buttons (no custom derive class);
+    the download dialog had the same triple-build and now builds once via
+    `buildControls()`. **Needs in-game verification** - copy the new Lua and
+    confirm the panel appears on Download/Update-all.
 
 - [ ] **Mod menu UI refresh without restart/lua reload.** After an
   install/update, the Mods menu list should reflect the change. We already
