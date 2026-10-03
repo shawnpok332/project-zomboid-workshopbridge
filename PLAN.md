@@ -31,7 +31,7 @@ Staged plan agreed with joshua. Each phase ends with a review checkpoint - we do
 - [x] Live-session hardening: noexec/sandbox binary fallback dir, single-flight bootstrap, validation-timeout leniency (first-run self-update), FORK launch-mechanism default (posix_spawn EACCES in steam-run's sandbox), ANSI stripping, sticky error panel, staging outside `mods/` (game's file watcher tripped over backup dirs).
 - [x] Download-new-mod UI (Lua): Download button + ID/URL dialog; Java side needed no changes.
 
-Moved to Phase 4 (hardening, not blockers): workshop item with multiple mods; anonymous-login rejection -> account-login fallback (interactive, never store credentials); Steam Guard UX; `getWorkshopID()` as supplementary "Managed by Steam" signal; job cancellation.
+Moved to Phase 4 (hardening, not blockers): workshop item with multiple mods; anonymous-login rejection -> account-login fallback (interactive, never store credentials); Steam Guard UX; job cancellation; malformed Steam API JSON is currently treated like an empty/deleted result - consider throwing `IOException` on malformed JSON while tolerating valid empty responses.
 
 ## Phase 4 - Harden + release
 
@@ -44,6 +44,22 @@ Moved to Phase 4 (hardening, not blockers): workshop item with multiple mods; an
 - Workshop page + README install instructions.
 - Consider: "adopt" flow for mods the user installed manually (match by modID → ask for workshop URL), currently out of scope.
 
+## Testing status (Oct 2026)
+
+Verified in-game (joshua, Linux/GOG, 42.21.0): real Steam API check,
+steamcmd bootstrap incl. self-update, download + atomic install
+(EnableResetLuaButton), progress panel rendering, job completion lines,
+check/update-all result flashes, sticky click-to-dismiss errors,
+"Force update"/"Update" button titles, map self-healing (TrueWeight).
+
+Pending: out-of-date mod end-to-end (check -> badge -> update -> map
+advances -> check clean); normal playtest with mod loaded; Windows
+machine test (buddy: steamcmd.exe bootstrap, paths with spaces, fresh
+profile first-run); Windows playtest; error paths (bad ID, offline,
+deleted item); update-all with 2+ outdated mods; downloaded mod appears
+without restart (reloadMods question); doc test (buddy follows README
+verbatim).
+
 ## Open questions (carried)
 
 - Whether pzmm-style scanners flag the JAR's `ProcessBuilder` usage at warn or block level - mitigations already planned (open source, signing, ZB approval dialog).
@@ -55,50 +71,28 @@ Moved to Phase 4 (hardening, not blockers): workshop item with multiple mods; an
 New scope goes here, not into the phases above, until it is picked up and
 planned properly.
 
-- [ ] **Progress/feedback UI never renders in-game (bug, high priority).**
-  Clicking Download (dialog closes), per-mod Update, or Update-all shows no
-  progress UI at all, although the jobs themselves run fine (verified: real
-  download + install completed). The panel + sticky-error paths work in the
-  stubbed Lua tests, so this is in-game-only.
-  - **Root cause found Oct 2026** (vanilla `ISUI` sources): PZ's
-    `ISUIElement:instantiate()` calls `self:createChildren()` itself, but our
-    `WB_ProgressPanel` also called it from `initialise()`, and we called
-    `instantiate()` explicitly on top: the panel was built three times with
-    discarded Java peers and never rendered. Fixed by building a plain
-    `ISPanel` exactly like the working buttons (no custom derive class);
-    the download dialog had the same triple-build and now builds once via
-    `buildControls()`.
-  - **Still not rendering (user report Oct 2026)** - only buttons and the
-    per-mod "Updating..." text appear. New lead: the panel was built LAZILY
-    inside the pcall'd tick callback, so any construction failure was
-    swallowed silently and the module-level singleton stayed poisoned
-    forever; the working dialog/buttons are all built during normal UI
-    construction. Restructured: one panel per Mods screen
-    (`ms.wbProgressPanel`), built EAGERLY in the menu hook with the dialog's
-    proven new->initialise->instantiate->addChild order, plus a diagnostic
-    log line at creation (coords + javaObject presence).
-  **Needs in-game verification** - copy the new Lua, open the Mods menu,
-  check the log for the "progress panel created" line, then run a
-  check/download and confirm the panel appears. If it still doesn't render,
-  the log line will say which step broke.
-  - **Deeper problem found Oct 2026**: job `onDone` callbacks NEVER fire
-    in-game (no "complete"/"failed" log lines; per-mod "Updating..." stuck
-    forever). The tick poll shows no state transitions at all, although the
-    Java contract is verified correct. Suspect `Events.OnTick` doesn't fire
-    (or our handler doesn't run) while the Mods menu is open - it's a
-    main-menu screen. Added a temporary poll heartbeat
-    (`poll heartbeat: tick=N activeJobs=M`, every ~10s) plus a fallback
-    pump: the menu instance's per-frame `update()` now also drives
-    `WB_PollJobs` (idempotent, double-pumping harmless). Next in-game run
-    will show whether the tick fires (heartbeat lines) and the fallback
-    should make jobs complete regardless.
-  - **Resolved Oct 2026**: with the update() fallback pump in place, the
-    poll delivers: `nil -> running -> done` transitions fire and completion
-    lines print in-game. Heartbeat kept but quieted (only with active
-    jobs). Panel confirmed rendering visually by user.
-  - Check/update-all now flash their result summary ("Everything is up to
-    date" / "N mod(s) have updates") instead of going silent on success.
-- [ ] **Mod id vs folder-name mismatch (bug, fixed Oct 2026).** A mod whose
+- [x] **Progress/feedback UI (fixed Oct 2026).** Three stacked in-game-only
+  bugs, all fixed and verified: (1) the panel was built three times with
+  discarded Java peers (vanilla `instantiate()` calls `createChildren()`
+  itself); fixed by building a plain `ISPanel` once, eagerly in the menu
+  hook, following the working download dialog's order.
+  (2) Job `onDone` callbacks never fired - the poll never delivered while
+  the Mods menu (a main-menu screen) was open; fixed with a fallback pump
+  driving `WB_PollJobs` from the screen's per-frame `update()`, kept
+  alongside `Events.OnTick` (idempotent, double-pump harmless). Transitions
+  now log (`nil -> running -> done`).
+  (3) The check's `onDone` threw on a forward-referenced Lua local
+  (`WB_RefreshModPanel` declared after its use), silently swallowed by the
+  poll's `pcall` - hence checks going quiet after "Checking..."; fixed by
+  moving helpers above the handlers. Lesson: keep shared Lua locals above
+  first use; the poll swallows errors.
+  Panel renders with animated dots, check/update-all flash their result
+  summary ("Everything is up to date" / "N mod(s) have updates"), job
+  errors stick until clicked.
+- [x] **Operation logging (Oct 2026).** Every check / update-all / per-mod
+  update / download logs start (with job id) and finish/failure to the game
+  log, plus job state transitions while in flight.
+- [x] **Mod id vs folder-name mismatch (fixed Oct 2026).** A mod whose
   folder name differs from its mod.info `id=` (e.g. author typo: folder
   "True Weigth", id "TrueWeight") showed "Unknown workshop ID". Root cause:
   `readModId` didn't know the B42 `42.0/mod.info` layout, so it fell back to
@@ -128,8 +122,7 @@ planned properly.
   install/update, the Mods menu list should reflect the change. We already
   call `ms:reloadMods()` on completion; verify in-game whether the visible
   list actually refreshes, and if not find the right refresh hook (the game
-  may cache the mod list per screen open). Related to the progress-UI bug
-  above only in that both are "did anything happen?" UX.
+  may cache the mod list per screen open).
 
 - [ ] **Mod dependencies.** When downloading/updating a mod, detect required
   workshop items and offer to install them too. Example: `3799732653`
