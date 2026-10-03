@@ -219,9 +219,11 @@ local function WB_WrapUpdatePump(ms)
     ms.wbUpdatePumped = true
     local _update = ms.update
     if type(_update) ~= "function" then return end
+    local pollErrorLogged = false
     ms.update = function(self, ...)
         local ok, err = pcall(WB_PollJobs)
-        if not ok then
+        if not ok and not pollErrorLogged then
+            pollErrorLogged = true
             print("[WorkshopBridge] poll error: " .. tostring(err))
         end
         return _update(self, ...)

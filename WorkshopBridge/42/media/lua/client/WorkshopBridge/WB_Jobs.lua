@@ -52,13 +52,15 @@ end
 
 function WB_PollJobs()
     wbTick = wbTick + 1
-    -- TEMPORARY DIAGNOSTIC (remove once the tick mystery is solved): proves
-    -- whether this runs at all in the main-menu context, and what it sees.
+    -- Periodic heartbeat while jobs are in flight: shows the poll is alive
+    -- and what it sees. Silent when idle.
     if wbTick % 600 == 1 then
         local n = 0
         for _ in pairs(activeJobs) do n = n + 1 end
-        print("[WorkshopBridge] poll heartbeat: tick=" .. wbTick
-            .. " activeJobs=" .. n)
+        if n > 0 then
+            print("[WorkshopBridge] poll heartbeat: tick=" .. wbTick
+                .. " activeJobs=" .. n)
+        end
     end
     for jobId, cb in pairs(activeJobs) do
         -- wbGetJobStatus returns a JSON string (see docs/ARCHITECTURE.md);
