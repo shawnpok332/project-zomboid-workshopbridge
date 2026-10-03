@@ -111,20 +111,12 @@ planned properly.
   always re-downloads; per-mod update never checks first). The visible mod
   panel refreshes on check completion without reselecting.
 
-- [ ] **Per-mod "Updating..." label stuck / cleared on selection change (bug).**
-  Clicking a mod's Update button shows "Updating...", but it does not clear
-  when the job finishes. Additionally, selecting another mod and coming back
-  always clears the label, even if that mod's job is still running
-  (`updateView`/`WB_RefreshModPanel` knows nothing about in-flight jobs).
-  Fix direction: track in-progress update jobs per mod id
-  (`WB_UpdatingMods[modId] = jobId`, cleared on job done/fail) and have
-  `WB_RefreshModPanel` render "Updating..." (or the job's latest message)
-  for those mods. For the stuck case specifically: add console logging when
-  the per-mod `onDone` fires, reproduce in-game, and check whether the
-  callback runs at all - the label update may be lost to a stale panel
-  reference or a swallowed `pcall` error.
-  (The "check/update-all seem to do nothing" report is the progress-panel
-  bug above - same root cause, fixed pending verification.)
+- [ ] **Per-mod "Updating..." cleared on selection change (minor).**
+  The stuck-forever case is fixed (the update() fallback pump delivers
+  onDone now). Remaining cosmetic: selecting another mod mid-update and
+  coming back clears the "Updating..." label, since `updateView` doesn't
+  know about in-flight jobs. Fix if it annoys: track in-progress jobs per
+  mod id and render from that in `WB_RefreshModPanel`.
 
 - [ ] **Mod menu UI refresh without restart/lua reload.** After an
   install/update, the Mods menu list should reflect the change. We already
@@ -148,3 +140,19 @@ planned properly.
   `wbOpenWorkshopPage(workshopId)`. Show only when a workshop id is known
   (tracked by us or Steam-managed). Mind the posix_spawn/FORK situation on
   the spawn path.
+
+- [ ] **Release checklist (before any public build).**
+  - `WB_Config.DEBUG_STUB` is still `true`: without the Java backend the mod
+    silently fakes a working UI. Must be off (or hard-gated) for release.
+  - Version number in mod.info.
+  - Release signing + VirusTotal scan of the jar.
+  - GOG/ZombieBuddy install guide with screenshots; Workshop page +
+    release-ready README install instructions.
+- [ ] **GitHub releases for WorkshopBridge.** Versioned, downloadable
+  releases of the mod itself. Depends on: release checklist above.
+  (May never get done.)
+- [ ] **Self update check.** The mod checks GitHub releases for a newer
+  version of itself and tells the user. Depends on: GitHub releases.
+  (May never get done.)
+- [ ] **Auto update.** Download and install the new version itself.
+  Depends on: self update check. (May never get done.)
