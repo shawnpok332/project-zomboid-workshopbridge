@@ -20,33 +20,27 @@ Staged plan agreed with joshua. Each phase ends with a review checkpoint - we do
 - In-game verification (42.20.4, debug stub): mod loads with no Lua errors, Check/Update-all buttons render bottom-right, per-mod Update button + three-state status label work, clicking Update flips the label to "Updating...".
 - Two real bugs found and fixed during verification: (1) `doDrawItem` wrapper dropped vanilla's return value -> black screen, `__sub not defined for operands` every frame; (2) buttons anchored left of the bottom-left Back button -> rendered offscreen. Both covered by regression tests in `tests/lua/`.
 - License: MIT scaffolded, not yet confirmed.
-- **GOG ZombieBuddy install path**: GOG users must manually copy `ZombieBuddy.jar` + native lib and inject the `-agentlib:`/`-javaagent:` JVM flag. Must be tested on a real GOG install and documented step-by-step. Currently blocked: see Phase 3.
+- **GOG ZombieBuddy install path**: proven on joshua's machine (launch script: `steam-run` + bundled JRE + `-javaagent:ZombieBuddy.jar` + `-Dzomboid.steam=0`). Step-by-step guide with screenshots still to be written (Phase 4).
 
-## Phase 3 - Java side (blocked on ZombieBuddy, Oct 2026)
+## Phase 3 - Java side (done Oct 2026)
 
-**Blocker:** ZombieBuddy 2.3.2 does not load Java mods on PZ 42.21.0. The game changed `ZomboidFileSystem.loadMods(ArrayList<String>)` to `loadMods(List<String>)` and ZB's hook still matches the old signature ([zed-0xff/ZombieBuddy#53](https://github.com/zed-0xff/ZombieBuddy/issues/53)). [PR #56](https://github.com/zed-0xff/ZombieBuddy/pull/56) widens the hook to `List` (matches both 42.20 and 42.21) but is not yet confirmed in-game. Plan: joshua forks or builds from the PR, then we compile against the real `ZombieBuddy.jar` + PZ classes.
+**Blocker (resolved):** ZombieBuddy 2.3.2 did not load Java mods on PZ 42.21.0 (`loadMods(ArrayList<String>)` -> `loadMods(List<String>)`, [zed-0xff/ZombieBuddy#53](https://github.com/zed-0xff/ZombieBuddy/issues/53)). joshua built ZB from [PR #56](https://github.com/zed-0xff/ZombieBuddy/pull/56) and we compiled clean against the real 42.21.0 `projectzomboid.jar`.
 
-Implemented (compiled under JDK 17 with stubs, 19-check harness green with a fake steamcmd):
-- `SteamCmdApi` (Lua globals via `@LuaMethod(global=true)`), `Backend` (lazy singleton),
-  `JobManager` (background jobs, JSON status), `WorkshopMap` (persisted JSON map),
-  `SteamCmd` (explicit `steamcmd.path` config or managed bootstrap, no discovery; `ProcessBuilder` downloads), `ModInstaller` (clean-replace
-  installs, `mod.info` id parsing), `WorkshopApi` (keyless `GetPublishedFileDetails`),
-  `Json` (minimal parser/writer), `Net` (friendly network-failure messages), `Main` (load logging).
-- Lua contract: `wbGetJobStatus` returns a JSON string; `WB_Json.lua` decoder on the Lua side; debug stub mirrors the JSON contract. Round-trip verified with real Java output.
+- [x] `SteamCmdApi` (Lua globals), `Backend` (lazy singleton), `JobManager` (background jobs, JSON status), `WorkshopMap` (atomic persisted map), `SteamCmd` (explicit `steamcmd.path` or managed Valve-CDN bootstrap; NixOS `steam-run` auto-wrap), `ModInstaller` (atomic swap installs, crash recovery), `WorkshopApi` (keyless `GetPublishedFileDetails`), `Json`, `Net` (friendly failures), `Main` (load logging).
+- [x] **Checkpoint:** end-to-end test passed - real download+install of a workshop mod in-game (EnableResetLuaButton, Oct 2026), after the full online smoke test passed on joshua's machine (real API + CDN + steamcmd).
+- [x] Live-session hardening: noexec/sandbox binary fallback dir, single-flight bootstrap, validation-timeout leniency (first-run self-update), FORK launch-mechanism default (posix_spawn EACCES in steam-run's sandbox), ANSI stripping, sticky error panel, staging outside `mods/` (game's file watcher tripped over backup dirs).
+- [x] Download-new-mod UI (Lua): Download button + ID/URL dialog; Java side needed no changes.
 
-Still to do together:
-- Compile against real ZombieBuddy.jar + PZ classes; fix any API drift.
-- End-to-end test: install a small workshop mod, then update it.
-- Remaining edge cases: workshop item with multiple mods; workshop item deleted; steamcmd missing 32-bit libs on Linux; anonymous login rejected → account-login fallback (interactive, never store credentials); Steam Guard UX; read the game's own `ChooseGameInfo.getModDetails(modId).getWorkshopID()` as a supplementary "Managed by Steam" signal; job cancellation.
-- Network failures: no pre-flight probe by design - failures are translated to friendly messages (`Net.friendlyMessage`: "Couldn't reach Steam's servers - check your internet connection.") and surface through the job error in the Lua UI.
-- [ ] **Checkpoint:** end-to-end test - install a small workshop mod, then update it.
-- ZBS signing, VirusTotal per release (Phase 4).
+Moved to Phase 4 (hardening, not blockers): workshop item with multiple mods; anonymous-login rejection -> account-login fallback (interactive, never store credentials); Steam Guard UX; `getWorkshopID()` as supplementary "Managed by Steam" signal; job cancellation.
 
-## Phase 4 - Harden + release (after Phase 3)
+## Phase 4 - Harden + release
 
+- Remaining edge cases from Phase 3 (see above).
+- Deleted/private workshop items are already surfaced in the job message (done Oct 2026).
+- 32-bit Linux runtime: hints in place (distro packages, NixOS `steam-run`/`nix-ld`); keep validating on real systems.
 - ZBS-sign releases (Ed25519); publish VirusTotal scan per release (see meowwoem's `SECURITYCHECK.MD` pattern).
 - Reproducible-build notes so users can verify the JAR.
-- GOG ZombieBuddy install guide with screenshots.
+- GOG ZombieBuddy install guide with screenshots (path proven, guide not written).
 - Workshop page + README install instructions.
 - Consider: "adopt" flow for mods the user installed manually (match by modID → ask for workshop URL), currently out of scope.
 
