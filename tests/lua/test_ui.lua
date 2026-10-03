@@ -29,6 +29,7 @@ function UIElement:new(x, y, w, h, ...)
 end
 function UIElement:initialise() end
 function UIElement:instantiate() end
+function UIElement:update() end
 function UIElement:addChild(c) table.insert(self.children, c) end
 function UIElement:setVisible(v) self.visible = v end
 function UIElement:isVisible() return self.visible end
@@ -224,6 +225,28 @@ tick(300)
 check(errPanel:isVisible(), "error panel sticks (no auto-hide)")
 errPanel:onMouseUp(errPanel, 10, 10) -- click dismisses
 check(not errPanel:isVisible(), "click dismisses error panel")
+
+-- ---------- update() fallback pump ----------
+check(ms.wbUpdatePumped, "update() pump installed on menu instance")
+-- simulate a dead tick (no OnTick firing): drive jobs via ms:update() only
+local fbDone, fbUpdates = nil, 0
+local realStatus = wbGetJobStatus
+local fbTicks = 0
+wbGetJobStatus = function(jobId)
+    fbTicks = fbTicks + 1
+    if fbTicks < 3 then
+        return '{"state":"running","done":0,"total":1,"message":"Working"}'
+    end
+    return '{"state":"done","done":1,"total":1,"message":"Done"}'
+end
+WB_TrackJob("fallback-job", {
+    onUpdate = function(st) fbUpdates = fbUpdates + 1 end,
+    onDone = function(st) fbDone = st end,
+})
+for _ = 1, 5 do ms:update() end -- no tick() calls: OnTick stays silent
+check(fbUpdates >= 1, "fallback pump delivers onUpdate", fbUpdates)
+check(fbDone and fbDone.state == "done", "fallback pump delivers onDone")
+wbGetJobStatus = realStatus
 
 print(failures == 0 and "ALL UI TESTS PASSED" or (failures .. " FAILURES"))
 os.exit(failures == 0 and 0 or 1)

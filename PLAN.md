@@ -81,6 +81,17 @@ planned properly.
   check the log for the "progress panel created" line, then run a
   check/download and confirm the panel appears. If it still doesn't render,
   the log line will say which step broke.
+  - **Deeper problem found Oct 2026**: job `onDone` callbacks NEVER fire
+    in-game (no "complete"/"failed" log lines; per-mod "Updating..." stuck
+    forever). The tick poll shows no state transitions at all, although the
+    Java contract is verified correct. Suspect `Events.OnTick` doesn't fire
+    (or our handler doesn't run) while the Mods menu is open - it's a
+    main-menu screen. Added a temporary poll heartbeat
+    (`poll heartbeat: tick=N activeJobs=M`, every ~10s) plus a fallback
+    pump: the menu instance's per-frame `update()` now also drives
+    `WB_PollJobs` (idempotent, double-pumping harmless). Next in-game run
+    will show whether the tick fires (heartbeat lines) and the fallback
+    should make jobs complete regardless.
 
 - [ ] **Per-mod "Updating..." label stuck / cleared on selection change (bug).**
   Clicking a mod's Update button shows "Updating...", but it does not clear

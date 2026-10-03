@@ -209,11 +209,31 @@ local function WB_WrapRowDrawing(ms)
     end
 end
 
+-- Fallback job pump: the poll normally runs on Events.OnTick, but if the
+-- tick doesn't fire while the Mods menu is open (main-menu context), the
+-- screen's per-frame update() drives it instead. WB_PollJobs is idempotent
+-- (terminal jobs are removed on first sighting), so double-pumping is
+-- harmless.
+local function WB_WrapUpdatePump(ms)
+    if ms.wbUpdatePumped then return end
+    ms.wbUpdatePumped = true
+    local _update = ms.update
+    if type(_update) ~= "function" then return end
+    ms.update = function(self, ...)
+        local ok, err = pcall(WB_PollJobs)
+        if not ok then
+            print("[WorkshopBridge] poll error: " .. tostring(err))
+        end
+        return _update(self, ...)
+    end
+end
+
 -- idempotent per-instance hook (safe to re-call, e.g. after reloadMods)
 function WB_HookInstance(ms)
     if not ms then return end
     WB_AddMenuButtons(ms)
     WB_WrapRowDrawing(ms)
+    WB_WrapUpdatePump(ms)
 end
 
 -- ---------- ModInfoPanel (per-mod) hooks ----------
