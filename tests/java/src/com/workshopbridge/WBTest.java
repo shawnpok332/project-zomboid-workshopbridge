@@ -234,23 +234,36 @@ public class WBTest {
 
         // ---- 9. interrupted-install recovery ----
         File modsDir = backend.modsDir();
+        File stageDir = new File(zomboidDir, "workshop_cache/.install-staging");
         Consumer<String> quiet = s -> {};
         // case A: crash between the two renames -> complete forward
+        // (legacy layout: staging next to the destination)
         File victimOld = new File(modsDir, "VictimMod.old-aaa");
         File victimNew = new File(modsDir, "VictimMod.new-aaa");
         writeFile(new File(victimOld, "common/mod.info"), "id=VictimMod\n");
         writeFile(new File(victimNew, "common/mod.info"), "id=VictimMod\n");
         writeFile(new File(victimNew, "newfile.txt"), "new");
-        ModInstaller.recoverInterruptedInstalls(modsDir.toPath(), quiet);
+        ModInstaller.recoverInterruptedInstalls(modsDir.toPath(), stageDir.toPath(), quiet);
         check(new File(modsDir, "VictimMod/newfile.txt").isFile(),
                 "mid-swap crash completes forward");
         check(!victimOld.exists() && !victimNew.exists(), "mid-swap leftovers cleaned");
+        // case A2: same, but with the current layout (staging in the stage dir,
+        // outside the mods folder the game's file watcher walks)
+        File victimOld2 = new File(stageDir, "Victim2Mod.old-bbb");
+        File victimNew2 = new File(stageDir, "Victim2Mod.new-bbb");
+        writeFile(new File(victimOld2, "common/mod.info"), "id=Victim2Mod\n");
+        writeFile(new File(victimNew2, "common/mod.info"), "id=Victim2Mod\n");
+        writeFile(new File(victimNew2, "newfile.txt"), "new");
+        ModInstaller.recoverInterruptedInstalls(modsDir.toPath(), stageDir.toPath(), quiet);
+        check(new File(modsDir, "Victim2Mod/newfile.txt").isFile(),
+                "mid-swap crash completes forward (stage dir)");
+        check(!victimOld2.exists() && !victimNew2.exists(), "stage-dir leftovers cleaned");
         // case B: backup left after a completed swap -> dropped, live tree kept
         File staleLive = new File(modsDir, "StaleMod");
         writeFile(new File(staleLive, "keep.txt"), "keep");
         File staleOld = new File(modsDir, "StaleMod.old-bbb");
         writeFile(new File(staleOld, "old.txt"), "old");
-        ModInstaller.recoverInterruptedInstalls(modsDir.toPath(), quiet);
+        ModInstaller.recoverInterruptedInstalls(modsDir.toPath(), stageDir.toPath(), quiet);
         check(new File(staleLive, "keep.txt").isFile() && !staleOld.exists(),
                 "post-swap backup cleaned");
         // case C: partial staging from a copy-phase crash -> dropped
@@ -258,7 +271,7 @@ public class WBTest {
         writeFile(new File(partialLive, "keep.txt"), "keep");
         File partialNew = new File(modsDir, "PartialMod.new-ccc");
         writeFile(new File(partialNew, "partial.txt"), "partial");
-        ModInstaller.recoverInterruptedInstalls(modsDir.toPath(), quiet);
+        ModInstaller.recoverInterruptedInstalls(modsDir.toPath(), stageDir.toPath(), quiet);
         check(new File(partialLive, "keep.txt").isFile() && !partialNew.exists(),
                 "partial staging dropped");
 
@@ -269,12 +282,12 @@ public class WBTest {
         File itemV1 = new File(scratch, "itemV1/mods/ReMod");
         writeFile(new File(itemV1, "common/mod.info"), "id=ReMod\n");
         writeFile(new File(itemV1, "old.txt"), "v1");
-        ModInstaller.install(new File(scratch, "itemV1"), modsDir, quiet);
+        ModInstaller.install(new File(scratch, "itemV1"), modsDir, stageDir, quiet);
         check(new File(modsDir, "ReMod/old.txt").isFile(), "v1 installed");
         File itemV2 = new File(scratch, "itemV2/mods/ReMod");
         writeFile(new File(itemV2, "common/mod.info"), "id=ReMod\n");
         writeFile(new File(itemV2, "new.txt"), "v2");
-        List<String> ids = ModInstaller.install(new File(scratch, "itemV2"), modsDir, quiet);
+        List<String> ids = ModInstaller.install(new File(scratch, "itemV2"), modsDir, stageDir, quiet);
         File reMod = new File(modsDir, "ReMod");
         check(new File(reMod, "new.txt").isFile() && !new File(reMod, "old.txt").exists(),
                 "reinstall clean-replaces (stale files gone)");
@@ -288,7 +301,13 @@ public class WBTest {
                 }
             }
         }
-        check(!leftovers, "no staging dirs left after install");
+        check(!leftovers, "no staging dirs left in mods after install");
+        boolean stageLeftovers = false;
+        File[] stageEntries = stageDir.listFiles();
+        if (stageEntries != null) {
+            stageLeftovers = stageEntries.length > 0;
+        }
+        check(!stageLeftovers, "no staging dirs left in stage dir after install");
 
         // ---- 11. installArchive handles a real tar.gz ----
         File tgzDir = scratchDir(zomboidDir, "wb-tgz");
@@ -352,6 +371,26 @@ public class WBTest {
         File fbHome = SteamCmd.fallbackSteamCmdDir("", "/home/u");
         check(fbHome.getAbsolutePath().equals("/home/u/.cache/workshopbridge/steamcmd"),
                 "fallback defaults to ~/.cache", fbHome);
+
+        // ---- 15. posix_spawn hint, ANSI stripping, validation leniency ----
+        check(SteamCmd.posixSpawnHint(
+                "cannot launch: Cannot run program \"/x/steamcmd.sh\": posix_spawn failed,"
+                        + " error: 13 (Permission denied)")
+                .contains("FORK"), "posix_spawn EACCES hint suggests FORK");
+        check(SteamCmd.posixSpawnHint("did not identify as steamcmd (exit=1)").isEmpty(),
+                "no FORK hint for other failures");
+        check(SteamCmd.posixSpawnHint(null).isEmpty(), "no FORK hint for null");
+        check(SteamCmd.stripAnsi("Loading Steam API...\u001B[0mOK")
+                .equals("Loading Steam API...OK"), "stripAnsi removes SGR reset");
+        check(SteamCmd.stripAnsi("\u001B[0mWaiting... \u001B[0mOK")
+                .equals("Waiting... OK"), "stripAnsi removes multiple codes");
+        check(SteamCmd.stripAnsi("plain line").equals("plain line"),
+                "stripAnsi leaves plain text alone");
+        check(SteamCmd.stripAnsi(null) == null, "stripAnsi null -> null");
+        check(SteamCmd.validationOk(null), "null reason is usable");
+        check(SteamCmd.validationOk("timed out after 30s without identifying as steamcmd"),
+                "validation timeout is usable (first-run self-update)");
+        check(!SteamCmd.validationOk("not executable"), "other reasons are not usable");
 
         System.out.println(failures == 0 ? "ALL TESTS PASSED" : failures + " FAILURES");
         System.exit(failures == 0 ? 0 : 1);

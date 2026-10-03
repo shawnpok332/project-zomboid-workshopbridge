@@ -22,21 +22,30 @@ import java.util.function.Consumer;
  * Moves a downloaded workshop item's mods into the game's mod folder.
  *
  * Each mod is installed with an atomic swap: the new tree is copied to a
- * staging dir first, then two renames swing it live ({@code dest -> dest.old-TAG},
- * {@code dest.new-TAG -> dest}). A rename is a single filesystem operation,
- * so {@code <mods>/<ModDir>/} is ever fully the old version or fully the
- * new one - never half-deleted or half-copied, even if the game is killed
- * mid-install. Leftover staging dirs from a crashed run are repaired by
+ * staging dir first, then two renames swing it live ({@code dest -> backup},
+ * {@code staging -> dest}). A rename is a single filesystem operation, so
+ * {@code <mods>/<ModDir>/} is ever fully the old version or fully the new
+ * one - never half-deleted or half-copied, even if the game is killed
+ * mid-install.
+ *
+ * Staging and backup dirs live OUTSIDE the mods folder (in a stage dir under
+ * the workshop cache): the game's own file watcher walks the mods tree, and
+ * watching a backup appear and be deleted mid-walk throws scary errors in
+ * the game log. Leftover staging dirs from a crashed run are repaired by
  * {@link #recoverInterruptedInstalls} before every install.
  */
 public final class ModInstaller {
     private ModInstaller() {}
 
     /**
-     * Installs every mod found in {@code <itemDir>/mods/}.
+     * Installs every mod found in {@code <itemDir>/mods/>}.
+     * {@code stageDir} holds the transient staging/backup dirs; it must be
+     * on the same filesystem as {@code modsDir} for the renames to stay
+     * atomic (a subdirectory of the workshop cache satisfies this).
      * Returns the installed PZ mod ids (from each mod.info {@code id=} line).
      */
-    public static List<String> install(File itemDir, File modsDir, Consumer<String> log) throws IOException {
+    public static List<String> install(File itemDir, File modsDir, File stageDir,
+            Consumer<String> log) throws IOException {
         File src = new File(itemDir, "mods");
         if (!src.isDirectory()) {
             throw new IOException("no mods/ in downloaded item: " + itemDir);
@@ -44,7 +53,10 @@ public final class ModInstaller {
         if (!modsDir.isDirectory() && !modsDir.mkdirs()) {
             throw new IOException("cannot create mods dir: " + modsDir);
         }
-        recoverInterruptedInstalls(modsDir.toPath(), log);
+        if (!stageDir.isDirectory() && !stageDir.mkdirs()) {
+            throw new IOException("cannot create stage dir: " + stageDir);
+        }
+        recoverInterruptedInstalls(modsDir.toPath(), stageDir.toPath(), log);
         List<String> installed = new ArrayList<>();
         File[] modDirs = src.listFiles(File::isDirectory);
         if (modDirs == null || modDirs.length == 0) {
@@ -54,7 +66,7 @@ public final class ModInstaller {
             String modId = readModId(modDir);
             File dest = new File(modsDir, modDir.getName());
             log.accept("Installing " + modId + " -> " + dest.getAbsolutePath());
-            atomicReplace(modDir.toPath(), dest.toPath(), log);
+            atomicReplace(modDir.toPath(), dest.toPath(), stageDir.toPath(), log);
             installed.add(modId);
         }
         return installed;
@@ -62,14 +74,17 @@ public final class ModInstaller {
 
     /**
      * Replaces {@code dest} with the tree at {@code src} atomically:
-     * copy aside, then rename old->backup and staging->dest. On failure the
-     * old tree is restored when possible; anything unrecoverable is left for
-     * {@link #recoverInterruptedInstalls} on the next run.
+     * copy aside into the stage dir, then rename old->backup and
+     * staging->dest. On failure the old tree is restored when possible;
+     * anything unrecoverable is left for {@link #recoverInterruptedInstalls}
+     * on the next run.
      */
-    private static void atomicReplace(Path src, Path dest, Consumer<String> log) throws IOException {
+    private static void atomicReplace(Path src, Path dest, Path stageDir,
+            Consumer<String> log) throws IOException {
         String tag = Long.toHexString(System.nanoTime());
-        Path staging = dest.resolveSibling(dest.getFileName() + ".new-" + tag);
-        Path backup = dest.resolveSibling(dest.getFileName() + ".old-" + tag);
+        String base = dest.getFileName().toString();
+        Path staging = stageDir.resolve(base + ".new-" + tag);
+        Path backup = stageDir.resolve(base + ".old-" + tag);
         copyRecursive(src, staging);
         boolean hadDest = Files.exists(dest);
         try {
@@ -105,15 +120,13 @@ public final class ModInstaller {
         }
     }
 
-    /**
-     * Repairs staging dirs left by a crashed install. Pairing is by the
-     * {@code .new-TAG} / {@code .old-TAG} suffix written by {@link #atomicReplace}.
-     */
-    static void recoverInterruptedInstalls(Path modsDir, Consumer<String> log) {
-        Map<String, Path> news = new HashMap<>();
-        Map<String, Path> olds = new HashMap<>();
-        Map<String, String> baseNames = new HashMap<>();
-        try (var stream = Files.list(modsDir)) {
+    /** Collects {@code <base>.new-TAG} / {@code <base>.old-TAG} dir pairs from one directory. */
+    private static void collectPairs(Path dir, Map<String, Path> news, Map<String, Path> olds,
+            Map<String, String> baseNames) {
+        if (dir == null || !Files.isDirectory(dir)) {
+            return;
+        }
+        try (var stream = Files.list(dir)) {
             for (Path p : (Iterable<Path>) stream::iterator) {
                 if (!Files.isDirectory(p)) {
                     continue;
@@ -132,8 +145,22 @@ public final class ModInstaller {
                 }
             }
         } catch (IOException e) {
-            return; // best effort; a later install will retry
+            // best effort; a later install will retry
         }
+    }
+
+    /**
+     * Repairs staging dirs left by a crashed install. Pairing is by the
+     * {@code .new-TAG} / {@code .old-TAG} suffix written by {@link #atomicReplace}.
+     * Scans the stage dir (current layout) and the mods dir itself (leftovers
+     * from older versions, which staged next to the destination).
+     */
+    static void recoverInterruptedInstalls(Path modsDir, Path stageDir, Consumer<String> log) {
+        Map<String, Path> news = new HashMap<>();
+        Map<String, Path> olds = new HashMap<>();
+        Map<String, String> baseNames = new HashMap<>();
+        collectPairs(modsDir, news, olds, baseNames);
+        collectPairs(stageDir, news, olds, baseNames);
         for (String tag : baseNames.keySet()) {
             Path staging = news.get(tag);
             Path backup = olds.get(tag);

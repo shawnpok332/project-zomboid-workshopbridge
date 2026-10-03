@@ -207,8 +207,13 @@ public final class JobManager {
     private void downloadAndInstall(String workshopId, long timeUpdated) throws Exception {
         File itemDir = backend.steamCmd().download(
                 workshopId, backend.cacheDir(), line -> System.out.println("[WorkshopBridge] " + line));
+        // staging lives under the workshop cache (same filesystem as mods/,
+        // so the swap renames stay atomic) and outside mods/ itself, where
+        // the game's file watcher would trip over the transient backup dirs
         List<String> modIds = ModInstaller.install(
-                itemDir, backend.modsDir(), line -> System.out.println("[WorkshopBridge] " + line));
+                itemDir, backend.modsDir(),
+                new File(backend.cacheDir(), ".install-staging"),
+                line -> System.out.println("[WorkshopBridge] " + line));
         backend.workshopMap().record(workshopId, modIds, timeUpdated);
     }
 

@@ -77,7 +77,9 @@ public class OnlineSmoke {
 
                 // ---- 4. through the real install pipeline ----
                 List<String> installed = ModInstaller.install(
-                        itemDir, new File(zomboidDir, "mods"), System.out::println);
+                        itemDir, new File(zomboidDir, "mods"),
+                        new File(zomboidDir, "workshop_cache/.install-staging"),
+                        System.out::println);
                 check(!installed.isEmpty(), "real install yields mod ids", installed);
             } catch (Exception e) {
                 check(false, "real download+install", e.getMessage());

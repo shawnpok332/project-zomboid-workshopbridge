@@ -55,8 +55,11 @@ Covered:
 - `SteamCmd`: explicit-path override, fake download to install to map
   recording, `installArchive` extracting a real `.tar.gz`
 - `ModInstaller`: atomic swap reinstall (stale files gone, no staging
-  leftovers), and all three crash-recovery cases (mid-swap completes forward,
-  post-swap backup dropped, partial staging dropped)
+  leftovers in `mods/` or the stage dir), and all three crash-recovery cases
+  (mid-swap completes forward, post-swap backup dropped, partial staging
+  dropped), in both the current stage-dir layout and the legacy in-`mods/`
+  layout. Staging lives in `workshop_cache/.install-staging` (outside `mods/`)
+  so the game's file watcher never trips over the transient backup dirs.
 - `Net.friendlyMessage`: DNS/connect timeouts become actionable messages
 
 In environments where Java cannot do a plain HTTP round-trip to localhost (some

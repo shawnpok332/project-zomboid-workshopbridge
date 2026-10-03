@@ -83,6 +83,14 @@ public final class SteamCmd {
             .connectTimeout(Duration.ofSeconds(20))
             .build();
 
+    /** Serializes bootstraps: extracting over a copy another thread is
+     * validating/running fails with ETXTBSY ("Text file busy"). */
+    private static final Object BOOTSTRAP_LOCK = new Object();
+
+    /** Matches ANSI SGR color sequences (ESC[...m), which steamcmd emits. */
+    private static final java.util.regex.Pattern ANSI_SGR =
+            java.util.regex.Pattern.compile("\u001B\\[[0-9;]*m");
+
     private final File zomboidDir;
 
     /**
@@ -121,17 +129,16 @@ public final class SteamCmd {
                 return null;
             }
             String reason = validateExecutable(f.getAbsolutePath());
-            if (reason != null) {
-                if (reason.startsWith("timed out")) {
-                    // probably a first-run self-update; the real download
-                    // completes it (same leniency as bootstrap())
-                    System.out.println("[WorkshopBridge] steamcmd.path validation timed out,"
-                            + " proceeding anyway (first-run self-update?): " + override);
-                    return f.getAbsolutePath();
-                }
+            if (!validationOk(reason)) {
                 overrideError = "steamcmd.path is not a working steamcmd (" + reason + "): " + override
-                        + missing32BitHint(reason);
+                        + missing32BitHint(reason) + posixSpawnHint(reason);
                 return null;
+            }
+            if (reason != null) {
+                // validation timed out: probably a first-run self-update; the
+                // real download completes it (same leniency as bootstrap())
+                System.out.println("[WorkshopBridge] steamcmd.path validation timed out,"
+                        + " proceeding anyway (first-run self-update?): " + override);
             }
             return f.getAbsolutePath();
         }
@@ -142,9 +149,11 @@ public final class SteamCmd {
         // our own managed copy from a previous bootstrap - a known location,
         // not a system-wide hunt. Checks every candidate dir: on a noexec
         // filesystem the primary copy can exist yet never validate.
+        // validationOk treats a timeout as usable (first-run self-update).
         for (File dir : steamCmdDirs()) {
             File managed = new File(dir, isWindows() ? "steamcmd.exe" : "steamcmd.sh");
-            if (managed.isFile() && validateExecutable(managed.getAbsolutePath()) == null) {
+            if (managed.isFile()
+                    && validationOk(validateExecutable(managed.getAbsolutePath()))) {
                 cachedExe = managed.getAbsolutePath();
                 return cachedExe;
             }
@@ -200,7 +209,14 @@ public final class SteamCmd {
             throw new IOException(overrideError + " -- fix or remove steamcmd.path in "
                     + new File(zomboidDir, "workshopbridge.properties"));
         }
-        return bootstrap(out);
+        synchronized (BOOTSTRAP_LOCK) {
+            // another thread may have bootstrapped while we waited
+            exe = findExecutable();
+            if (exe != null) {
+                return exe;
+            }
+            return bootstrap(out);
+        }
     }
 
     /**
@@ -236,7 +252,8 @@ public final class SteamCmd {
         try {
             p = pb.start();
         } catch (IOException e) {
-            throw new IOException("failed to launch steamcmd: " + e.getMessage(), e);
+            throw new IOException("failed to launch steamcmd: " + e.getMessage()
+                    + posixSpawnHint(e.getMessage()), e);
         }
         StringBuilder output = new StringBuilder();
         Thread drainer = new Thread(() -> {
@@ -244,12 +261,13 @@ public final class SteamCmd {
                     new InputStreamReader(p.getInputStream(), StandardCharsets.UTF_8))) {
                 String line;
                 while ((line = br.readLine()) != null) {
+                    final String clean = stripAnsi(line);
                     synchronized (output) {
                         if (output.length() < 200_000) {
-                            output.append(line).append('\n');
+                            output.append(clean).append('\n');
                         }
                     }
-                    log.accept("[steamcmd] " + line);
+                    log.accept("[steamcmd] " + clean);
                 }
             } catch (IOException ignored) {
                 // process ended
@@ -300,6 +318,47 @@ public final class SteamCmd {
     private static boolean isMac() {
         String os = System.getProperty("os.name", "").toLowerCase(Locale.ROOT);
         return os.contains("mac") || os.contains("darwin");
+    }
+
+    /**
+     * steamcmd colors its output with ANSI SGR sequences; the game's log
+     * renderer drops the ESC byte and leaves "[0m" garbage behind, so strip
+     * them before logging. Package-private for tests.
+     */
+    static String stripAnsi(String s) {
+        if (s == null) {
+            return null;
+        }
+        return ANSI_SGR.matcher(s).replaceAll("");
+    }
+
+    /**
+     * Suggests the FORK launch-mechanism flag when process spawning itself is
+     * blocked (posix_spawn + EACCES, seen inside steam-run's bubblewrap
+     * sandbox). The mod tries to set this itself at load (see Main), but the
+     * JDK may have read the default already. Package-private for tests.
+     */
+    static String posixSpawnHint(String reason) {
+        String low = reason == null ? "" : reason.toLowerCase(Locale.ROOT);
+        if (low.contains("posix_spawn")
+                && (low.contains("permission denied") || low.contains("error=13")
+                        || low.contains("error: 13"))) {
+            return " The JDK's posix_spawn launcher is blocked in this environment"
+                    + " (seen inside sandboxes such as steam-run's bubblewrap); retry with"
+                    + " -Djdk.lang.Process.launchMechanism=FORK on the game's Java command line.";
+        }
+        return "";
+    }
+
+    /**
+     * A null reason means usable. A validation *timeout* also means usable: it
+     * almost always indicates steamcmd's first-run self-update, which the real
+     * download that follows completes (generous timeout, output tail on
+     * failure). Treating it as "not found" caused pointless re-bootstraps.
+     * Package-private for tests.
+     */
+    static boolean validationOk(String reason) {
+        return reason == null || reason.startsWith("timed out");
     }
 
     /**
@@ -413,7 +472,7 @@ public final class SteamCmd {
                 while ((line = br.readLine()) != null) {
                     synchronized (output) {
                         if (output.length() < 64_000) {
-                            output.append(line).append('\n');
+                            output.append(stripAnsi(line)).append('\n');
                         }
                     }
                 }
@@ -541,9 +600,9 @@ public final class SteamCmd {
         // A timeout here just means the first-run self-update kicked in; the
         // real download that follows will complete it.
         String reason = validateExecutable(exe);
-        if (reason != null && !reason.startsWith("timed out")) {
+        if (!validationOk(reason)) {
             throw new IOException("Bootstrapped steamcmd failed validation in " + dir + ": " + reason
-                    + missing32BitHint(reason));
+                    + missing32BitHint(reason) + posixSpawnHint(reason));
         }
         cachedExe = exe;
         log.accept("steamcmd ready at " + exe
