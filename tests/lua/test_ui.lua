@@ -154,7 +154,12 @@ wbGetWorkshopId = realWsid
 panel:updateView(fakeModInfo("SomeMod", "")) -- re-select; marks seenModIds
 ms.wbCheckBtn.onclick() -- click "Check for updates"
 tick(30)
-check(WB_ProgressPanel ~= nil, "progress panel class exists")
+-- progress panel: added once as a child of the screen, visible, with a label
+local prog = ms.children[#ms.children]
+check(prog ~= nil and prog.wbLabel ~= nil, "progress panel created with label")
+check(prog:isVisible(), "progress panel visible during job")
+check(prog.wbLabel.name:find("Checking") ~= nil, "progress shows check message",
+    prog.wbLabel.name)
 tick(200) -- stub check job: 12 ticks/step x 6 steps
 check(WB_IsUpdateAvailable("SomeMod"), "update marked available after check")
 check(ms.wbUpdateAllBtn.title == "Update all (2)", "update-all button shows count",
@@ -196,11 +201,25 @@ WB_TrackJob("no-such-job", { onDone = function(st) doneState = st end })
 tick(2)
 check(doneState and doneState.state == "failed", "unknown job -> failed onDone")
 
--- ---------- flash message auto-hides ----------
+-- ---------- flash message auto-hides, error panel sticks ----------
 WB_FlashMessage(ms, "boom")
+local flashPanel = ms.children[#ms.children]
+check(flashPanel:isVisible(), "flash panel visible")
+check(flashPanel.wbLabel.name == "boom", "flash shows message", flashPanel.wbLabel.name)
 tick(200)
 -- progress panel should have been hidden by the flash timeout
-check(true, "flash timeout elapsed without error")
+check(not flashPanel:isVisible(), "flash auto-hides after timeout")
+
+WB_ShowError(ms, "kaput")
+local errPanel = ms.children[#ms.children]
+check(errPanel:isVisible(), "error panel visible")
+check(errPanel.wbLabel.name:find("kaput") ~= nil
+    and errPanel.wbLabel.name:find("click to dismiss") ~= nil,
+    "error shows message + dismiss hint", errPanel.wbLabel.name)
+tick(300)
+check(errPanel:isVisible(), "error panel sticks (no auto-hide)")
+errPanel:onMouseUp(errPanel, 10, 10) -- click dismisses
+check(not errPanel:isVisible(), "click dismisses error panel")
 
 print(failures == 0 and "ALL UI TESTS PASSED" or (failures .. " FAILURES"))
 os.exit(failures == 0 and 0 or 1)

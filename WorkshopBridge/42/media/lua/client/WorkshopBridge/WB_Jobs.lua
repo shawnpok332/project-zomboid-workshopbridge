@@ -101,30 +101,15 @@ function WB_ShortError(err, maxLen)
 end
 
 -- ---------- progress panel (throbber) ----------
-
-WB_ProgressPanel = ISPanel:derive("WB_ProgressPanel")
-
-function WB_ProgressPanel:initialise()
-    ISPanel.initialise(self)
-    self:createChildren()
-end
-
-function WB_ProgressPanel:createChildren()
-    self.label = ISLabel:new(12, 14, 20, "", 1, 1, 1, 1, UIFont.Small, true)
-    self.label:initialise()
-    self.label:instantiate()
-    self:addChild(self.label)
-end
-
-function WB_ProgressPanel:setMessage(text)
-    WB_SetLabel(self.label, text)
-end
-
--- Clicking the panel dismisses a stuck error (provisional: relies on PZ
--- routing onMouseUp to child panels, the standard ISButton pattern).
-function WB_ProgressPanel:onMouseUp(x, y)
-    WB_HideProgress()
-end
+--
+-- A plain ISPanel, deliberately NOT a custom derived class: an earlier
+-- version derived from ISPanel with its own initialise()/createChildren()
+-- never rendered in-game. Root cause: PZ's ISUIElement:instantiate() calls
+-- self:createChildren() itself, so our initialise() -> createChildren() ->
+-- addChild() -> auto-instantiate() -> createChildren() recursion plus an
+-- explicit instantiate() built the panel three times, discarding Java peers
+-- along the way. This builds it once, the same way the working menu buttons
+-- are built (new -> initialise -> addChild).
 
 local progressPanel = nil
 local progressBase = ""
@@ -132,25 +117,37 @@ local progressVisible = false
 local flashHideAt = nil
 local errorStuck = false
 
+local function WB_EnsureProgressPanel(parent)
+    if progressPanel then return progressPanel end
+    local w, h = 380, 48
+    progressPanel = ISPanel:new(
+        math.max(0, parent:getWidth() / 2 - w / 2),
+        math.max(0, parent:getHeight() / 2 - h / 2),
+        w, h)
+    progressPanel:initialise()
+    progressPanel.backgroundColor = { r = 0.03, g = 0.03, b = 0.03, a = 0.93 }
+    progressPanel.borderColor = { r = 0.45, g = 0.45, b = 0.45, a = 1.0 }
+    -- click dismisses a stuck error (instance-level override; vanilla
+    -- ISPanel:onMouseUp is a no-op unless moveWithMouse)
+    progressPanel.onMouseUp = function(self, x, y)
+        WB_HideProgress()
+    end
+    local label = ISLabel:new(12, 14, 20, "", 1, 1, 1, 1, UIFont.Small, true)
+    label:initialise()
+    progressPanel:addChild(label) -- auto-instantiates panel + label, no recursion
+    progressPanel.wbLabel = label
+    parent:addChild(progressPanel)
+    return progressPanel
+end
+
 function WB_ShowProgress(parent, message)
     if not parent then return end
-    if not progressPanel then
-        local w, h = 380, 48
-        progressPanel = WB_ProgressPanel:new(
-            math.max(0, parent:getWidth() / 2 - w / 2),
-            math.max(0, parent:getHeight() / 2 - h / 2),
-            w, h)
-        progressPanel:initialise()
-        progressPanel:instantiate()
-        progressPanel.backgroundColor = { r = 0.03, g = 0.03, b = 0.03, a = 0.93 }
-        progressPanel.borderColor = { r = 0.45, g = 0.45, b = 0.45, a = 1.0 }
-        parent:addChild(progressPanel)
-    end
+    local panel = WB_EnsureProgressPanel(parent)
     progressBase = message or ""
     flashHideAt = nil
     errorStuck = false
-    progressPanel:setMessage(progressBase)
-    progressPanel:setVisible(true)
+    WB_SetLabel(panel.wbLabel, progressBase)
+    panel:setVisible(true)
     progressVisible = true
 end
 
@@ -163,7 +160,7 @@ function WB_ShowError(parent, message)
     errorStuck = true
     flashHideAt = nil
     if progressPanel then
-        progressPanel:setMessage(progressBase .. "  (click to dismiss)")
+        WB_SetLabel(progressPanel.wbLabel, progressBase .. "  (click to dismiss)")
     end
 end
 
@@ -181,7 +178,7 @@ function WB_TickProgressPanel(tick)
     if errorStuck then return end -- stuck error: no throbber dots, no auto-hide
     if progressVisible and progressPanel then
         local dots = string.rep(".", math.floor(tick / 20) % 4)
-        progressPanel:setMessage(progressBase .. dots)
+        WB_SetLabel(progressPanel.wbLabel, progressBase .. dots)
     end
 end
 

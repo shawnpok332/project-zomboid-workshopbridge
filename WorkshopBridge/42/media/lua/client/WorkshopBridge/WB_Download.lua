@@ -23,12 +23,12 @@ end
 
 WB_DownloadDialog = ISPanel:derive("WB_DownloadDialog")
 
-function WB_DownloadDialog:initialise()
-    ISPanel.initialise(self)
-    self:createChildren()
-end
-
-function WB_DownloadDialog:createChildren()
+-- NOTE: deliberately no initialise()/createChildren() overrides. PZ's
+-- ISUIElement:instantiate() calls createChildren() itself, so building
+-- controls there (plus an explicit instantiate()) constructs the dialog
+-- several times with discarded Java peers. Controls are built once, by an
+-- explicit call after instantiate().
+function WB_DownloadDialog:buildControls()
     local pad = 12
     local w = self:getWidth()
     self.titleLabel = ISLabel:new(pad, pad, 20, WB_Text.DownloadModTitle,
@@ -45,7 +45,6 @@ function WB_DownloadDialog:createChildren()
     for _, c in ipairs({ self.titleLabel, self.hintLabel, self.entry,
                          self.errorLabel, self.downloadBtn, self.cancelBtn }) do
         c:initialise()
-        c:instantiate()
         self:addChild(c)
     end
     self.downloadBtn:setFont(UIFont.Small)
@@ -112,7 +111,8 @@ function WB_ShowDownloadDialog(ms)
         math.max(0, ms:getHeight() / 2 - h / 2), w, h)
     dlg.ms = ms
     dlg:initialise()
-    dlg:instantiate()
+    dlg:instantiate() -- once; createChildren is the empty base version
+    dlg:buildControls()
     dlg.backgroundColor = { r = 0.05, g = 0.05, b = 0.05, a = 0.97 }
     dlg.borderColor = { r = 0.45, g = 0.45, b = 0.45, a = 1.0 }
     ms:addChild(dlg)

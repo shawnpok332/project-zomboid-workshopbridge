@@ -125,6 +125,7 @@ check(ms.wbDownloadDialog:isVisible(), "dialog visible")
 local dlg = ms.wbDownloadDialog
 ms.wbDownloadBtn.onclick() -- again: must not stack duplicates
 check(#ms.children == kidsBefore + 1, "no duplicate dialogs", #ms.children)
+check(#dlg.children == 6, "dialog builds its controls exactly once", #dlg.children)
 
 -- invalid input: error shown, dialog stays open, no job started
 dlg.entry:setText("not a workshop id")
