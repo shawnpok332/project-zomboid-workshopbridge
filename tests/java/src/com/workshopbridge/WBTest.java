@@ -310,6 +310,14 @@ public class WBTest {
                 "did not identify as steamcmd (exit=1, output: nope)").isEmpty(),
                 "no 32-bit hint for other failures");
 
+        // ---- 13. NixOS detection and hint ----
+        check(SteamCmd.isNixOSRelease("NAME=NixOS\nID=nixos\nVERSION=\"25.05\"\n"),
+                "detects NixOS");
+        check(!SteamCmd.isNixOSRelease("NAME=Ubuntu\nID=ubuntu\n"),
+                "non-NixOS not detected");
+        check(SteamCmd.missing32BitHint("did not identify as steamcmd (exit=127)", true)
+                .contains("steam-run"), "NixOS hint names steam-run");
+
         System.out.println(failures == 0 ? "ALL TESTS PASSED" : failures + " FAILURES");
         System.exit(failures == 0 ? 0 : 1);
     }

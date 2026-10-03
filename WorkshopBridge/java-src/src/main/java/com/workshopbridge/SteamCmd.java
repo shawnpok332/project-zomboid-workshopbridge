@@ -16,6 +16,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -77,6 +78,15 @@ public final class SteamCmd {
             .build();
 
     private final File zomboidDir;
+
+    /**
+     * Prefix prepended to steamcmd invocations on systems that cannot run
+     * Valve's prebuilt binaries directly. On NixOS there is no
+     * /lib/ld-linux.so.2, so foreign binaries need steam-run (or a
+     * system-wide nix-ld, in which case no prefix is needed and none is
+     * applied). Empty everywhere else.
+     */
+    private static final List<String> LAUNCH_PREFIX = computeLaunchPrefix();
 
     /** Last validated path (positive results are cached; misses are re-scanned). */
     private volatile String cachedExe;
@@ -172,7 +182,7 @@ public final class SteamCmd {
         if (!cacheDir.isDirectory() && !cacheDir.mkdirs()) {
             throw new IOException("cannot create cache dir: " + cacheDir);
         }
-        List<String> cmd = new ArrayList<>();
+        List<String> cmd = new ArrayList<>(LAUNCH_PREFIX);
         cmd.add(exe);
         // NB: +force_install_dir must come before +login, or steamcmd errors out.
         cmd.add("+force_install_dir");
@@ -266,14 +276,62 @@ public final class SteamCmd {
      * Package-private so tests can cover the signatures.
      */
     static String missing32BitHint(String reason) {
+        return missing32BitHint(reason, isNixOS());
+    }
+
+    // package-private for tests
+    static String missing32BitHint(String reason, boolean nixos) {
         String low = reason.toLowerCase(Locale.ROOT);
         if (low.contains("shared librar") || low.contains("exit=127")) {
+            if (nixos) {
+                return " NixOS cannot run Valve's prebuilt steamcmd directly: install"
+                        + " steam-run from nixpkgs (or enable nix-ld) and retry.";
+            }
             return " This usually means the 32-bit runtime libraries are missing."
                     + " Debian/Ubuntu: sudo apt install lib32gcc-s1 lib32stdc++6 |"
                     + " Arch: sudo pacman -S lib32-gcc-libs |"
                     + " Fedora: sudo dnf install glibc.i686 libstdc++.i686 -- then retry.";
         }
         return "";
+    }
+
+    private static List<String> computeLaunchPrefix() {
+        if (isNixOS() && commandExists("steam-run")) {
+            System.out.println("[WorkshopBridge] NixOS detected: running steamcmd via steam-run");
+            return List.of("steam-run");
+        }
+        return List.of();
+    }
+
+    private static boolean commandExists(String name) {
+        try {
+            Process p = new ProcessBuilder("sh", "-c", "command -v " + name)
+                    .redirectErrorStream(true).start();
+            return p.waitFor(10, TimeUnit.SECONDS) && p.exitValue() == 0;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /** True on NixOS (no FHS /lib: foreign binaries need steam-run or nix-ld). */
+    private static boolean isNixOS() {
+        try {
+            return isNixOSRelease(
+                    Files.readString(Path.of("/etc/os-release"), StandardCharsets.UTF_8));
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    // package-private for tests
+    static boolean isNixOSRelease(String osRelease) {
+        for (String line : osRelease.split("\n")) {
+            String t = line.trim();
+            if (t.equals("ID=nixos") || t.equals("ID_LIKE=nixos")) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -296,7 +354,10 @@ public final class SteamCmd {
         }
         Process p;
         try {
-            p = new ProcessBuilder(path, "+quit").redirectErrorStream(true).start();
+            List<String> cmd = new ArrayList<>(LAUNCH_PREFIX);
+            cmd.add(path);
+            cmd.add("+quit");
+            p = new ProcessBuilder(cmd).redirectErrorStream(true).start();
         } catch (IOException e) {
             return "cannot launch: " + e.getMessage();
         }

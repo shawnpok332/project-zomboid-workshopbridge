@@ -77,7 +77,9 @@ it writes stays in `tests/java/.test-work-online/` (gitignored).
 
 Linux note: steamcmd is a 32-bit binary, so the bootstrap step fails with
 install instructions if your system lacks the 32-bit runtime libraries
-(`sudo apt install lib32gcc-s1 lib32stdc++6` on Debian/Ubuntu).
+(`sudo apt install lib32gcc-s1 lib32stdc++6` on Debian/Ubuntu). On NixOS,
+install `steam-run` from nixpkgs (or enable `nix-ld`); the mod runs steamcmd
+through `steam-run` automatically when it's available.
 
 If the probe workshop item ever disappears, step 1 fails loudly - that means
 the world changed, not the test.

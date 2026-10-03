@@ -20,6 +20,9 @@ In this doc, "the Zomboid folder" means the game's save/cache directory: `~/Zomb
      with a message telling you to fix or remove it; when no path is
      configured, the mod uses its managed copy (bootstrapping it first if
      needed).
+   - *NixOS:* Valve's steamcmd can't run directly (no `/lib/ld-linux.so.2`).
+     Install `steam-run` from nixpkgs (or enable `nix-ld`); WorkshopBridge
+     runs steamcmd through `steam-run` automatically when it's available.
 4. Launch the game. If you run with `-Dzomboid.steam=0` (GOG), everything works. WorkshopBridge never touches Steamworks.
 
 ## Usage
