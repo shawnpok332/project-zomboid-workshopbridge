@@ -46,6 +46,12 @@ import java.util.zip.ZipInputStream;
  *   3. If nothing usable is found, a working copy is bootstrapped automatically
  *      from Valve's CDN into the mod-managed {@code <Zomboid>/workshop_cache/steamcmd/}
  *      using only JDK stdlib (HttpClient + ZipInputStream + a small tar reader).
+ *      When that dir lives on a filesystem that refuses to execute files
+ *      (noexec mounts are common for removable media, e.g. a game library on
+ *      an external drive), the steamcmd *binary* is bootstrapped into a
+ *      fallback dir under the user's cache instead ({@code ~/.cache/} or
+ *      {@code $XDG_CACHE_HOME}); workshop downloads still land in the primary
+ *      cache dir, only the executable moves.
  *
  * CONSENT MODEL (deliberate choice): bootstrapping is AUTOMATIC inside the
  * download path (it runs on the JobManager background thread with progress
@@ -134,20 +140,49 @@ public final class SteamCmd {
         }
         cachedExe = null;
         // our own managed copy from a previous bootstrap - a known location,
-        // not a system-wide hunt
-        File managed = managedExe();
-        if (managed.isFile() && validateExecutable(managed.getAbsolutePath()) == null) {
-            cachedExe = managed.getAbsolutePath();
-            return cachedExe;
+        // not a system-wide hunt. Checks every candidate dir: on a noexec
+        // filesystem the primary copy can exist yet never validate.
+        for (File dir : steamCmdDirs()) {
+            File managed = new File(dir, isWindows() ? "steamcmd.exe" : "steamcmd.sh");
+            if (managed.isFile() && validateExecutable(managed.getAbsolutePath()) == null) {
+                cachedExe = managed.getAbsolutePath();
+                return cachedExe;
+            }
         }
         return null;
     }
 
-    /** The steamcmd binary inside our mod-managed bootstrap dir. */
-    private File managedExe() {
+    /** The steamcmd binary dir inside the Zomboid folder (primary candidate). */
+    private File primarySteamCmdDir() {
         return new File(zomboidDir,
-                "workshop_cache" + File.separator + "steamcmd" + File.separator
-                        + (isWindows() ? "steamcmd.exe" : "steamcmd.sh"));
+                "workshop_cache" + File.separator + "steamcmd");
+    }
+
+    /**
+     * Fallback dir for the steamcmd binary when the primary dir is on a
+     * filesystem that refuses to execute files. Package-private for tests.
+     */
+    static File fallbackSteamCmdDir(String xdgCacheHome, String userHome) {
+        File base = (xdgCacheHome != null && !xdgCacheHome.isBlank())
+                ? new File(xdgCacheHome)
+                : new File(userHome, ".cache");
+        return new File(base, "workshopbridge" + File.separator + "steamcmd");
+    }
+
+    private static File fallbackSteamCmdDir() {
+        return fallbackSteamCmdDir(System.getenv("XDG_CACHE_HOME"),
+                System.getProperty("user.home"));
+    }
+
+    /** Candidate steamcmd binary dirs in preference order. */
+    private List<File> steamCmdDirs() {
+        List<File> dirs = new ArrayList<>();
+        dirs.add(primarySteamCmdDir());
+        File fb = fallbackSteamCmdDir();
+        if (!fb.equals(primarySteamCmdDir())) {
+            dirs.add(fb);
+        }
+        return dirs;
     }
 
     /**
@@ -282,6 +317,15 @@ public final class SteamCmd {
     // package-private for tests
     static String missing32BitHint(String reason, boolean nixos) {
         String low = reason.toLowerCase(Locale.ROOT);
+        if (nixos && low.contains("error=2") && low.contains("no such file")) {
+            // The script itself is present and executable, but the kernel
+            // cannot find its interpreter (/bin/bash) - the classic NixOS
+            // "no FHS" symptom, surfacing one step earlier than the 32-bit
+            // loader problem below.
+            return " On NixOS, Valve's steamcmd needs an FHS environment to launch:"
+                    + " install steam-run from nixpkgs (or enable nix-ld), make sure it is"
+                    + " on PATH when you start the game, and retry.";
+        }
         if (low.contains("shared librar") || low.contains("exit=127")) {
             if (nixos) {
                 return " NixOS cannot run Valve's prebuilt steamcmd directly: install"
@@ -427,12 +471,16 @@ public final class SteamCmd {
     }
 
     /**
-     * Downloads and extracts a private steamcmd copy into the mod-managed dir.
+     * Downloads and extracts a private steamcmd copy into a mod-managed dir.
      * Deliberately does NOT exec-validate the fresh copy: the first launch
      * triggers steamcmd's self-update, which would blow the validation timeout.
      * Existence + executability is checked here; the real download right after
      * will surface any deeper problem (e.g. missing 32-bit libs) with its
      * output tail.
+     *
+     * Tries each candidate dir in order: when the primary dir is on a
+     * filesystem that refuses to execute files (noexec), validation fails
+     * with "permission denied" and we retry in the fallback dir.
      */
     private String bootstrap(Consumer<String> log) throws IOException {
         boolean win = isWindows();
@@ -441,7 +489,40 @@ public final class SteamCmd {
                     + "cannot bootstrap it. Install a community build and point steamcmd.path at it in "
                     + new File(zomboidDir, "workshopbridge.properties"));
         }
-        File dir = new File(zomboidDir, "workshop_cache" + File.separator + "steamcmd");
+        List<File> dirs = steamCmdDirs();
+        IOException lastFailure = null;
+        for (int i = 0; i < dirs.size(); i++) {
+            File dir = dirs.get(i);
+            try {
+                return bootstrapIn(dir, win, log);
+            } catch (IOException e) {
+                boolean hasNext = i < dirs.size() - 1;
+                if (hasNext && isExecDenied(e.getMessage())) {
+                    log.accept("Cannot execute files in " + dir + " (permission denied -"
+                            + " the drive may be mounted with 'noexec'); trying " + dirs.get(i + 1)
+                            + " for the steamcmd binary instead.");
+                    lastFailure = e;
+                } else {
+                    throw e;
+                }
+            }
+        }
+        throw lastFailure != null ? lastFailure
+                : new IOException("no steamcmd install location available");
+    }
+
+    /** True when a failure message smells like EACCES on exec. Package-private for tests. */
+    static boolean isExecDenied(String message) {
+        if (message == null) {
+            return false;
+        }
+        String low = message.toLowerCase(Locale.ROOT);
+        return low.contains("permission denied")
+                || low.contains("error=13")
+                || low.contains("error: 13");
+    }
+
+    private String bootstrapIn(File dir, boolean win, Consumer<String> log) throws IOException {
         if (!dir.isDirectory() && !dir.mkdirs()) {
             throw new IOException("cannot create " + dir);
         }
@@ -461,7 +542,7 @@ public final class SteamCmd {
         // real download that follows will complete it.
         String reason = validateExecutable(exe);
         if (reason != null && !reason.startsWith("timed out")) {
-            throw new IOException("Bootstrapped steamcmd failed validation: " + reason
+            throw new IOException("Bootstrapped steamcmd failed validation in " + dir + ": " + reason
                     + missing32BitHint(reason));
         }
         cachedExe = exe;

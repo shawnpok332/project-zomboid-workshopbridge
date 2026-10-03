@@ -72,7 +72,7 @@ local function WB_OnCheckAll(ms)
             end
             WB_RefreshUpdateAllButton(ms, n)
             if st and st.state == "failed" then
-                WB_FlashMessage(ms, WB_Text.CheckFailed .. ": " .. tostring(st.error or "?"))
+                WB_ShowError(ms, WB_Text.CheckFailed .. ": " .. WB_ShortError(st.error, 64))
             end
         end,
     })
@@ -94,7 +94,7 @@ local function WB_OnUpdateAll(ms)
             WB_ClearUpdateAvailable()
             WB_RefreshUpdateAllButton(ms, 0)
             if st and st.state == "failed" then
-                WB_FlashMessage(ms, WB_Text.UpdateFailed .. ": " .. tostring(st.error or "?"))
+                WB_ShowError(ms, WB_Text.UpdateFailed .. ": " .. WB_ShortError(st.error, 64))
             else
                 -- rescan so newly downloaded/changed mods appear; then make
                 -- sure our row wrap survived (re-applied defensively)
@@ -122,7 +122,7 @@ local function WB_OnModUpdate(panel)
         onDone = function(st)
             if st and st.state == "failed" then
                 WB_SetLabel(panel.wbStatusLabel,
-                    WB_Text.UpdateFailed .. ": " .. tostring(st.error or "?"))
+                    WB_Text.UpdateFailed .. ": " .. WB_ShortError(st.error, 48))
             else
                 WB_SetLabel(panel.wbStatusLabel, WB_Text.UpToDate)
                 WB_UnmarkUpdateAvailable(modId)

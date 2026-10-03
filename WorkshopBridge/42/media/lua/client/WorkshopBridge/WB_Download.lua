@@ -76,8 +76,8 @@ function WB_DownloadDialog:onDownloadClicked()
         onDone = function(st)
             WB_HideProgress()
             if st and st.state == "failed" then
-                WB_FlashMessage(ms,
-                    WB_Text.DownloadFailed .. ": " .. tostring(st.error or "?"))
+                WB_ShowError(ms,
+                    WB_Text.DownloadFailed .. ": " .. WB_ShortError(st.error, 64))
             else
                 WB_FlashMessage(ms, WB_Text.Downloaded)
                 -- rescan so the new mod shows up; then make sure our

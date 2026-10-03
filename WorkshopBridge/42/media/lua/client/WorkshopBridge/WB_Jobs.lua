@@ -87,6 +87,19 @@ function WB_SetButtonTitle(btn, text)
     if btn.setTitle then btn:setTitle(text) else btn.title = text end
 end
 
+-- Shorten a job error for display: first line only, strip
+-- "com.foo.BarException: " prefixes, trim, truncate. The full text stays
+-- in the log (Java prints it), the UI only needs the gist.
+function WB_ShortError(err, maxLen)
+    maxLen = maxLen or 120
+    local s = tostring(err or "?")
+    s = s:match("^([^\n\r]*)") or s
+    s = s:gsub("^[%w%.%$]+Exception:%s*", "")
+    s = s:match("^%s*(.-)%s*$") or s
+    if #s > maxLen then s = s:sub(1, maxLen - 3) .. "..." end
+    return s
+end
+
 -- ---------- progress panel (throbber) ----------
 
 WB_ProgressPanel = ISPanel:derive("WB_ProgressPanel")
@@ -107,10 +120,17 @@ function WB_ProgressPanel:setMessage(text)
     WB_SetLabel(self.label, text)
 end
 
+-- Clicking the panel dismisses a stuck error (provisional: relies on PZ
+-- routing onMouseUp to child panels, the standard ISButton pattern).
+function WB_ProgressPanel:onMouseUp(x, y)
+    WB_HideProgress()
+end
+
 local progressPanel = nil
 local progressBase = ""
 local progressVisible = false
 local flashHideAt = nil
+local errorStuck = false
 
 function WB_ShowProgress(parent, message)
     if not parent then return end
@@ -128,9 +148,23 @@ function WB_ShowProgress(parent, message)
     end
     progressBase = message or ""
     flashHideAt = nil
+    errorStuck = false
     progressPanel:setMessage(progressBase)
     progressPanel:setVisible(true)
     progressVisible = true
+end
+
+-- Show an error in the progress panel and keep it there until the user
+-- clicks it away. Flash messages vanish after ~2.5s, too fast to read a
+-- failure; errors need to wait for the user, not the other way round.
+function WB_ShowError(parent, message)
+    if not parent then return end
+    WB_ShowProgress(parent, message)
+    errorStuck = true
+    flashHideAt = nil
+    if progressPanel then
+        progressPanel:setMessage(progressBase .. "  (click to dismiss)")
+    end
 end
 
 -- Show a message briefly, then auto-hide (for errors).
@@ -144,6 +178,7 @@ function WB_TickProgressPanel(tick)
         WB_HideProgress()
         return
     end
+    if errorStuck then return end -- stuck error: no throbber dots, no auto-hide
     if progressVisible and progressPanel then
         local dots = string.rep(".", math.floor(tick / 20) % 4)
         progressPanel:setMessage(progressBase .. dots)
@@ -152,6 +187,7 @@ end
 
 function WB_HideProgress()
     flashHideAt = nil
+    errorStuck = false
     progressVisible = false
     if progressPanel then progressPanel:setVisible(false) end
 end

@@ -318,6 +318,34 @@ public class WBTest {
         check(SteamCmd.missing32BitHint("did not identify as steamcmd (exit=127)", true)
                 .contains("steam-run"), "NixOS hint names steam-run");
 
+        // ---- 14. noexec fallback helpers ----
+        check(SteamCmd.isExecDenied(
+                "Bootstrapped steamcmd failed validation in /mnt/x: cannot launch:"
+                        + " Cannot run program \"/mnt/x/steamcmd.sh\": posix_spawn failed,"
+                        + " error: 13 (Permission denied)"),
+                "EACCES detected as exec-denied");
+        check(SteamCmd.isExecDenied("Cannot run program \"foo\": error=13, Permission denied"),
+                "error=13 detected as exec-denied");
+        check(!SteamCmd.isExecDenied("did not identify as steamcmd (exit=127)"),
+                "exit=127 is not exec-denied");
+        check(!SteamCmd.isExecDenied(null), "null is not exec-denied");
+        check(SteamCmd.missing32BitHint(
+                "cannot launch: Cannot run program \"/home/u/.cache/wb/steamcmd.sh\":"
+                        + " error=2, No such file or directory",
+                true).contains("steam-run"),
+                "NixOS error=2 hint names steam-run");
+        check(SteamCmd.missing32BitHint(
+                "cannot launch: Cannot run program \"/home/u/.cache/wb/steamcmd.sh\":"
+                        + " error=2, No such file or directory",
+                false).isEmpty(),
+                "no error=2 hint off NixOS");
+        File fbXdg = SteamCmd.fallbackSteamCmdDir("/tmp/xdgcache", "/home/u");
+        check(fbXdg.getAbsolutePath().equals("/tmp/xdgcache/workshopbridge/steamcmd"),
+                "fallback honors XDG_CACHE_HOME", fbXdg);
+        File fbHome = SteamCmd.fallbackSteamCmdDir("", "/home/u");
+        check(fbHome.getAbsolutePath().equals("/home/u/.cache/workshopbridge/steamcmd"),
+                "fallback defaults to ~/.cache", fbHome);
+
         System.out.println(failures == 0 ? "ALL TESTS PASSED" : failures + " FAILURES");
         System.exit(failures == 0 ? 0 : 1);
     }
