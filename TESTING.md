@@ -17,6 +17,9 @@ Runs, in order:
    PZ globals and walks the whole flow: boot, menu hook, three-state per-mod panel
    (Update / Managed by Steam / Unknown workshop ID), check-for-updates, update
    badges on rows, per-mod update, update-all, unknown jobs, flash messages.
+3. **Download dialog** (`test_download.lua`) - the workshop-ID/URL parser plus the
+   download flow: dialog open/validate/cancel, fake download job, `reloadMods`
+   on completion.
 3. **Java to Lua JSON round-trip** (`test_roundtrip.lua`) - serializes real job
    statuses with the real Java `Json` class, then decodes them with the real Lua
    decoder. Needs `javac`/`java` (JDK 17+); skipped loudly when absent.

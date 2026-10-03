@@ -29,6 +29,7 @@ In this doc, "the Zomboid folder" means the game's save/cache directory: `~/Zomb
 
 - **Check for updates** scans the workshop for newer versions of your WorkshopBridge-tracked mods. Nothing happens automatically. Checks only run when you ask, so a surprise update can't break your save.
 - **Update all (N)** downloads and installs every available update. Mods are replaced cleanly, stale files removed.
+- **Download** grabs a brand-new mod from the workshop: paste a workshop ID or URL (e.g. `2685600088` or the full `steamcommunity.com/sharedfiles/...?id=2685600088` link). It installs like an update and is tracked from then on.
 - Each mod row shows its state: **Update** (tracked by WorkshopBridge), **Managed by Steam**, or **Unknown workshop ID**. Selecting a tracked mod shows a per-mod **Update** button.
 - Long operations show a progress panel with a throbber. If the network is down you'll get "Couldn't reach Steam's servers - check your internet connection" instead of a raw exception.
 

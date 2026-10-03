@@ -94,6 +94,10 @@ Jobs run on Java background threads. Lua never blocks waiting on them.
 2. Java: for each mapped workshop item, `GetPublishedFileDetails` → if `time_updated > timeUpdated`, download+move+update map. Job reports `done/total`.
 3. Lua: refresh the Mods list when the job completes.
 
+### Download a new mod
+1. Lua: **Download** button → dialog takes a workshop ID or URL → `WB_ParseWorkshopId` → `wbUpdateMod(workshopId)` → jobId. (The Java side treats untracked ids the same as updates: download → move into `Zomboid/mods/` → record in map.)
+2. Lua polls `wbGetJobStatus(jobId)` on tick with the progress panel; on completion the Mods list is reloaded so the new mod appears, and it is tracked from then on.
+
 ### First run / missing pieces
 - ZombieBuddy not installed → Lua detects `wbIsAvailable() == false` (globals missing) → Mods menu shows install guidance instead of Update buttons.
 - steamcmd not found → the Java side **bootstraps it automatically** from Valve's CDN into `Zomboid/workshop_cache/steamcmd/` (inside the download job, with progress). No system-wide discovery: either `steamcmd.path` in `Zomboid/workshopbridge.properties` (validated by execution, always wins) or the previously bootstrapped managed copy. `wbGetSteamCmdPath()` returns nil only when neither exists yet.

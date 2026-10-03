@@ -35,6 +35,7 @@ run() { # name, script
 
 run "JSON decoder" test_json.lua
 run "UI integration (stubbed PZ globals)" test_ui.lua
+run "Download dialog" test_download.lua
 
 # Java -> Lua contract: serialize real job statuses with the real Json class,
 # then decode them with the real Lua decoder.

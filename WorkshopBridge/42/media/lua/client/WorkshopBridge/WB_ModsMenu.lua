@@ -14,6 +14,7 @@
 -- standard approach. All hooks are idempotent (wb*Added flags).
 require "WorkshopBridge/WB_Config"
 require "WorkshopBridge/WB_Jobs"
+require "WorkshopBridge/WB_Download"
 
 -- ---------- helpers ----------
 
@@ -149,11 +150,14 @@ local function WB_AddMenuButtons(ms)
     local y = anchor:getY()
     local xUpdate = anchor:getX() - gap - bw
     local xCheck = xUpdate - gap - bw
+    local xDownload = xCheck - gap - bw
     ms.wbCheckBtn = ISButton:new(xCheck, y, bw, bh, WB_Text.CheckForUpdates, ms,
         function() WB_OnCheckAll(ms) end)
     ms.wbUpdateAllBtn = ISButton:new(xUpdate, y, bw, bh, WB_Text.UpdateAll, ms,
         function() WB_OnUpdateAll(ms) end)
-    for _, b in ipairs({ ms.wbCheckBtn, ms.wbUpdateAllBtn }) do
+    ms.wbDownloadBtn = ISButton:new(xDownload, y, bw, bh, WB_Text.Download, ms,
+        function() WB_ShowDownloadDialog(ms) end)
+    for _, b in ipairs({ ms.wbCheckBtn, ms.wbUpdateAllBtn, ms.wbDownloadBtn }) do
         b:initialise()
         b:instantiate()
         b:setAnchorLeft(false)
