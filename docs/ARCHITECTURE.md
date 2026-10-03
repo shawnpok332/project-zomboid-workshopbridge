@@ -66,6 +66,20 @@ dedicated single-thread executor - concurrent steamcmd processes share one
 install dir and gain nothing. Checks stay on the cached pool. A download job
 waiting its turn reports `"Queued..."` as its message until it starts.
 
+Hardening (Oct 2026, from an external audit):
+- `SteamCmd.download()` enforces a zero exit code - a failed run can never
+  install a stale cache dir as if it were fresh; the previous download is
+  left untouched.
+- A timed-out steamcmd is waited on (bounded) after `destroyForcibly()`
+  so it can't overlap the next serialized job.
+- Malformed Steam API responses fail the check job (`IOException`) instead
+  of parsing as "no items listed" (which would misreport every mod as
+  deleted or up to date).
+- Repeat check clicks coalesce onto the already-running check job.
+- On API failure during a per-mod update, the previously recorded
+  `timeUpdated` is kept instead of the wall clock, so the next check
+  retries the comparison rather than wrongly calling it current.
+
 ## workshopbridge_map.json
 
 ```json

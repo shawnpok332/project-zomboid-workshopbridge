@@ -285,6 +285,16 @@ public final class SteamCmd {
         }
         if (!finished) {
             p.destroyForcibly();
+            try {
+                // bound the overlap window: with serialized downloads the
+                // next job must not start while this process is still exiting
+                if (!p.waitFor(30, TimeUnit.SECONDS)) {
+                    System.out.println("[WorkshopBridge] warning: steamcmd for "
+                            + workshopId + " did not exit after destroy");
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
             throw new IOException("steamcmd timed out downloading " + workshopId);
         }
         try {
@@ -295,14 +305,21 @@ public final class SteamCmd {
         File itemDir = new File(cacheDir,
                 "steamapps/workshop/content/" + APP_ID + "/" + workshopId);
         File modsDir = new File(itemDir, "mods");
+        String tail;
+        synchronized (output) {
+            String o = output.toString();
+            tail = o.substring(Math.max(0, o.length() - 2000));
+        }
+        int exit = p.exitValue();
+        if (exit != 0) {
+            // never trust a stale cache dir: a failed update must not
+            // install the previous download as if it were fresh
+            throw new IOException("steamcmd failed for " + workshopId
+                    + " (exit=" + exit + "). Output tail:\n" + tail);
+        }
         if (!modsDir.isDirectory()) {
-            String tail;
-            synchronized (output) {
-                String o = output.toString();
-                tail = o.substring(Math.max(0, o.length() - 2000));
-            }
             throw new IOException("steamcmd produced no mods/ for " + workshopId
-                    + " (exit=" + p.exitValue() + "). Output tail:\n" + tail);
+                    + " (exit=" + exit + "). Output tail:\n" + tail);
         }
         return itemDir;
     }

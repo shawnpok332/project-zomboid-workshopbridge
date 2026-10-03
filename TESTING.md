@@ -50,7 +50,9 @@ Covered:
   edge-case tests)
 - `WorkshopApi.parseTimeUpdated` against a **real captured Steam response**
   (`tests/java/fixtures/publishedfiledetails.json`), including the string
-  `publishedfileid` and the `result=9` (bogus id) omission
+  `publishedfileid` and the `result=9` (bogus id) omission; malformed JSON
+  and structurally invalid responses now throw instead of parsing as empty
+  (a broken response must fail the check, never look like "all deleted")
 - `WorkshopMap`: atomic save (no `.tmp` left behind), reload round-trip,
   corrupt file loads empty instead of throwing, `42.0/mod.info` id parsing,
   self-healing reverse lookup (stale folder-name entry repaired via mod.info
@@ -58,9 +60,13 @@ Covered:
 - `JobManager`: check job end to end (finds updates, flags items the API no
   longer lists), update-all job, per-mod update job, invalid ids, unknown jobs,
   steamcmd failure surfacing as a failed job with the cause in `error`,
-  download serialization (second download reports "Queued...", never overlaps)
+  download serialization (second download reports "Queued...", never overlaps),
+  repeat checks coalesce onto the running job, malformed API response fails the
+  check instead of reporting "up to date"
 - `SteamCmd`: explicit-path override, fake download to install to map
-  recording, `installArchive` extracting a real `.tar.gz`
+  recording, `installArchive` extracting a real `.tar.gz`, nonzero exit with a
+  stale cache rejected (no reinstalling the old tree as if fresh), timed-out
+  process waited on after destroy so it can't overlap the next queued job
 - `ModInstaller`: atomic swap reinstall (stale files gone, no staging
   leftovers in `mods/` or the stage dir), and all three crash-recovery cases
   (mid-swap completes forward, post-swap backup dropped, partial staging

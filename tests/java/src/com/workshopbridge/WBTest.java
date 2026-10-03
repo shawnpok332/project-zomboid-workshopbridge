@@ -9,6 +9,8 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 
 /**
@@ -28,6 +30,16 @@ public class WBTest {
 
     static void check(boolean c, String name) {
         check(c, name, null);
+    }
+
+    /** True when running r throws IllegalArgumentException. */
+    static boolean throwsIAE(Runnable r) {
+        try {
+            r.run();
+            return false;
+        } catch (IllegalArgumentException e) {
+            return true;
+        }
     }
 
     /** Polls a job until it leaves RUNNING; returns the final status map. */
@@ -101,8 +113,10 @@ public class WBTest {
         check(parsed.get("2685600088") != null && parsed.get("2685600088") > 1_700_000_000L,
                 "real response: time_updated parsed", parsed.get("2685600088"));
         check(!parsed.containsKey("1"), "real response: bogus id absent (result=9)");
-        check(WorkshopApi.parseTimeUpdated("not json").isEmpty(), "garbage -> empty map");
-        check(WorkshopApi.parseTimeUpdated("{\"response\":{}}").isEmpty(), "empty response -> empty");
+        check(throwsIAE(() -> WorkshopApi.parseTimeUpdated("not json")),
+                "garbage -> throws (never silently empty)");
+        check(throwsIAE(() -> WorkshopApi.parseTimeUpdated("{\"response\":{}}")),
+                "response without publishedfiledetails -> throws");
         check(Net.friendlyMessage(new java.io.IOException(
                 new java.net.UnknownHostException("x")))
                 .startsWith("Couldn't reach Steam's servers"), "net dns");
@@ -158,11 +172,16 @@ public class WBTest {
         // ---- 4. check job with a stub Steam API: 111 updated, 222 gone ----
         HttpServer api = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         int apiPort = api.getAddress().getPort();
-        String apiJson = "{\"response\":{\"publishedfiledetails\":["
+        AtomicReference<String> apiJson = new AtomicReference<>(
+                "{\"response\":{\"publishedfiledetails\":["
                 + "{\"publishedfileid\":\"111\",\"time_updated\":2000,"
-                + "\"result\":1}]}}";
+                + "\"result\":1}]}}");
+        AtomicBoolean apiSlow = new AtomicBoolean(false);
         api.createContext("/", ex -> {
-            byte[] b = apiJson.getBytes(StandardCharsets.UTF_8);
+            if (apiSlow.get()) {
+                try { Thread.sleep(3000); } catch (InterruptedException ignored) { }
+            }
+            byte[] b = apiJson.get().getBytes(StandardCharsets.UTF_8);
             ex.getResponseHeaders().add("Content-Type", "application/json");
             ex.sendResponseHeaders(200, b.length);
             try (OutputStream os = ex.getResponseBody()) { os.write(b); }
@@ -205,6 +224,33 @@ public class WBTest {
             String umsg = String.valueOf(uast.get("message"));
             check(umsg.contains("All mods up to date") && umsg.contains("222"),
                     "update-all message notes missing item", umsg);
+
+            // ---- 4c2. repeat checks coalesce onto the running job ----
+            apiSlow.set(true);
+            String coalesce1 = jobs.submitCheck();
+            String coalesce2 = jobs.submitCheck();
+            check(coalesce1.equals(coalesce2),
+                    "second check while one runs rejoins the same job");
+            awaitDone(jobs, coalesce1);
+            apiSlow.set(false);
+            String coalesce3 = jobs.submitCheck();
+            check(!coalesce3.equals(coalesce1),
+                    "new check after completion starts a fresh job");
+            awaitDone(jobs, coalesce3);
+
+            // ---- 4c3. malformed API response fails the check outright ----
+            // it must never look like "everything deleted / up to date"
+            apiJson.set("this is not json");
+            String badApiId = jobs.submitCheck();
+            Map<String, Object> badSt = awaitDone(jobs, badApiId);
+            check("failed".equals(badSt.get("state")),
+                    "malformed API response -> failed check", badSt.get("state"));
+            check(String.valueOf(badSt.get("error")).contains("malformed"),
+                    "failure error says the response was malformed",
+                    badSt.get("error"));
+            apiJson.set("{\"response\":{\"publishedfiledetails\":["
+                    + "{\"publishedfileid\":\"111\",\"time_updated\":2000,"
+                    + "\"result\":1}]}}");
         }
         api.stop(0);
 
@@ -238,6 +284,24 @@ public class WBTest {
         check("done".equals(sdone.get("state")) && "done".equals(fdone.get("state")),
                 "both queued downloads complete");
 
+        // ---- 4e. a failed steamcmd must not install stale cached content ----
+        // 99996 downloads fine once; then the fake is told to fail (exit 1)
+        // while the previous files are still cached. The job must fail with
+        // the exit code named, not reinstall the stale tree as if fresh.
+        String staleId1 = jobs.submitUpdate("99996");
+        Map<String, Object> stale1 = awaitDone(jobs, staleId1);
+        check("done".equals(stale1.get("state")), "stale-test setup download completes",
+                stale1.get("error"));
+        File failMarker = new File(backend.cacheDir(), ".fail-99996");
+        check(failMarker.createNewFile(), "fail marker created", failMarker);
+        String staleId2 = jobs.submitUpdate("99996");
+        Map<String, Object> stale2 = awaitDone(jobs, staleId2);
+        check("failed".equals(stale2.get("state")),
+                "failed steamcmd with stale cache -> failed job", stale2.get("state"));
+        check(String.valueOf(stale2.get("error")).contains("exit=1"),
+                "failure error cites the exit code", stale2.get("error"));
+        check(failMarker.delete(), "fail marker cleaned up");
+
         // ---- 4b. check-summary message building (no network needed) ----
         check(JobManager.checkSummary(2, List.of("222")).contains("2 mod(s) have updates")
                 && JobManager.checkSummary(2, List.of("222")).contains("222"),
@@ -266,8 +330,8 @@ public class WBTest {
         Map<String, Object> fst = awaitDone(jobs, failId);
         check("failed".equals(fst.get("state")), "steamcmd failure -> failed job",
                 fst.get("state"));
-        check(String.valueOf(fst.get("error")).contains("no mods/"),
-                "failure error names the problem", fst.get("error"));
+        check(String.valueOf(fst.get("error")).contains("exit=1"),
+                "failure error cites the exit code", fst.get("error"));
 
         // ---- 6. invalid workshop id fails cleanly ----
         String badId = jobs.submitUpdate("abc");

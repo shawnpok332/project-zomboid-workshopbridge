@@ -15,6 +15,12 @@ if [ "$ID" = "0" ]; then
   echo "ERROR! Download item 0 failed (No match)" >&2
   exit 1
 fi
+if [ -f "$CACHE/.fail-$ID" ]; then
+  # simulated failure that leaves any previously cached files in place:
+  # the caller must reject the stale cache, not install it
+  echo "ERROR! Download item $ID failed (simulated)" >&2
+  exit 1
+fi
 if [ "$ID" = "99998" ]; then
   # slow mode for the download-serialization test: hold the worker so a
   # second queued download can be observed waiting

@@ -31,7 +31,7 @@ Staged plan agreed with joshua. Each phase ends with a review checkpoint - we do
 - [x] Live-session hardening: noexec/sandbox binary fallback dir, single-flight bootstrap, validation-timeout leniency (first-run self-update), FORK launch-mechanism default (posix_spawn EACCES in steam-run's sandbox), ANSI stripping, sticky error panel, staging outside `mods/` (game's file watcher tripped over backup dirs).
 - [x] Download-new-mod UI (Lua): Download button + ID/URL dialog; Java side needed no changes.
 
-Moved to Phase 4 (hardening, not blockers): workshop item with multiple mods; anonymous-login rejection -> account-login fallback (interactive, never store credentials); Steam Guard UX; job cancellation; malformed Steam API JSON is currently treated like an empty/deleted result - consider throwing `IOException` on malformed JSON while tolerating valid empty responses.
+Moved to Phase 4 (hardening, not blockers): workshop item with multiple mods; anonymous-login rejection -> account-login fallback (interactive, never store credentials); Steam Guard UX; job cancellation. Done Oct 2026: malformed Steam API JSON now fails the check (`IOException`) instead of looking like an empty/deleted result; failed steamcmd can no longer install a stale cache (exit code enforced); timed-out steamcmd is waited on before the next serialized job starts; repeat check clicks coalesce onto the running job; per-update timestamp falls back to the previously recorded one instead of the wall clock on API failure.
 
 ## Phase 4 - Harden + release
 
@@ -124,6 +124,15 @@ planned properly.
   list actually refreshes, and if not find the right refresh hook (the game
   may cache the mod list per screen open).
 
+- [ ] **Orphaned sub-mods on multi-mod item update.** If a workshop item
+  containing several mods drops one of them, updating installs the new set
+  but never removes the dropped mod's folder, and the map forgets the
+  association. Fix: after a successful install, compare the previous entry's
+  modIds with the new ones and delete folders whose mod.info id matches a
+  removed modId - but only when ownership is unambiguous (no other map entry
+  claims that mod id). Deferring: rare case, and auto-deleting the wrong
+  folder would be worse than leaving an orphan the user can delete manually.
+
 - [ ] **Mod dependencies.** When downloading/updating a mod, detect required
   workshop items and offer to install them too. Example: `3799732653`
   depends on `3171167894`. Open mechanism: Steam's `GetPublishedFileDetails`
@@ -158,8 +167,9 @@ planned properly.
   the spawn path.
 
 - [ ] **Release checklist (before any public build).**
-  - `WB_Config.DEBUG_STUB` is still `true`: without the Java backend the mod
-    silently fakes a working UI. Must be off (or hard-gated) for release.
+  - ~~`WB_Config.DEBUG_STUB` must be off for release~~ done Oct 2026:
+    defaults to `false`; the Lua UI tests enable it explicitly. Without the
+    Java backend the mod now shows install guidance instead of fake successes.
   - Version number in mod.info.
   - Release signing + VirusTotal scan of the jar.
   - GOG/ZombieBuddy install guide with screenshots; Workshop page +

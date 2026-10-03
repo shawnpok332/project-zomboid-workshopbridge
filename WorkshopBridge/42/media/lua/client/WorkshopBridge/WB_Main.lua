@@ -17,7 +17,9 @@ local function WB_DetectApi()
     -- (zed-0xff/ZombieBuddy#53, fixed by PR #56). The stub fallback below
     -- keeps the UI testable until then; it is not a substitute for the
     -- real backend.
-    -- fall back to the canned debug stub so the UI is verifiable in-game
+    -- fall back to the canned debug stub so the UI stays verifiable in-game
+    -- when DEBUG_STUB is explicitly enabled (it defaults to false: a shipped
+    -- build must never report fake successes)
     if WB_Config.DEBUG_STUB then
         require "WorkshopBridge/WB_DebugStub"
         if WB_InstallDebugStub() then return "stub" end

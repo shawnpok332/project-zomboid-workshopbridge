@@ -73,13 +73,23 @@ public final class JobManager {
         return t;
     });
     private final ConcurrentHashMap<String, Job> jobs = new ConcurrentHashMap<>();
+    /** The currently running check job, if any: repeat clicks coalesce onto it. */
+    private volatile Job activeCheck;
 
     JobManager(Backend backend) {
         this.backend = backend;
     }
 
     public String submitCheck() {
-        return submit("check", this::runCheck);
+        // coalesce: a check is idempotent, so repeat clicks while one is
+        // running just rejoin the same job instead of spawning more threads
+        Job cur = activeCheck;
+        if (cur != null && cur.state == State.RUNNING) {
+            return cur.id;
+        }
+        String id = submit("check", this::runCheck);
+        activeCheck = jobs.get(id);
+        return id;
     }
 
     public String submitUpdateAll() {
@@ -214,8 +224,11 @@ public final class JobManager {
             timeUpdated = WorkshopApi.getTimeUpdated(List.of(workshopId))
                     .getOrDefault(workshopId, System.currentTimeMillis() / 1000L);
         } catch (Exception e) {
-            // best effort: without a timestamp the next check will just re-download once
-            timeUpdated = System.currentTimeMillis() / 1000L;
+            // best effort: keep the previously recorded timestamp (if any)
+            // instead of the wall clock, so a later check retries the
+            // comparison instead of wrongly considering us current
+            WorkshopMap.Entry prev = backend.workshopMap().snapshot().get(workshopId);
+            timeUpdated = prev == null ? 0L : prev.timeUpdated;
         }
         try {
             downloadAndInstall(workshopId, timeUpdated);

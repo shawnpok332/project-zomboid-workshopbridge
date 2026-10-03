@@ -42,7 +42,14 @@ public final class WorkshopApi {
             body.append("&publishedfileids%5B").append(i).append("%5D=")
                     .append(URLEncoder.encode(workshopIds.get(i), StandardCharsets.UTF_8));
         }
-        return parseTimeUpdated(postForm(DETAILS_URL, body.toString()));
+        final String raw = postForm(DETAILS_URL, body.toString());
+        try {
+            return parseTimeUpdated(raw);
+        } catch (IllegalArgumentException e) {
+            // a malformed response must fail the check: silently treating it
+            // as "no items listed" would misreport every mod as deleted
+            throw new IOException("malformed Steam API response: " + e.getMessage(), e);
+        }
     }
 
     private static String postForm(String url, String formBody) throws IOException {
@@ -71,23 +78,24 @@ public final class WorkshopApi {
      * Extracts workshopId -> time_updated from a GetPublishedFileDetails
      * response body. Package-private so tests can run it against captured
      * real responses (see tests/java/fixtures/).
+     *
+     * @throws IllegalArgumentException when the response is not JSON or is
+     *         missing the expected structure ({@code response} object with a
+     *         {@code publishedfiledetails} array). Individual malformed
+     *         entries are skipped; a structurally invalid whole response is
+     *         never silently treated as "no items".
      */
     static Map<String, Long> parseTimeUpdated(String json) {
         Map<String, Long> out = new LinkedHashMap<>();
-        final Object root;
-        try {
-            root = Json.parse(json);
-        } catch (IllegalArgumentException e) {
-            return out;
-        }
+        final Object root = Json.parse(json); // throws on malformed JSON
         Map<String, Object> rootObj = Json.object(root);
         Map<String, Object> response = rootObj == null ? null : Json.object(rootObj.get("response"));
         if (response == null) {
-            return out;
+            throw new IllegalArgumentException("missing 'response' object");
         }
         List<Object> details = Json.array(response.get("publishedfiledetails"));
         if (details == null) {
-            return out;
+            throw new IllegalArgumentException("missing 'publishedfiledetails' array");
         }
         for (Object d : details) {
             Map<String, Object> m = Json.object(d);

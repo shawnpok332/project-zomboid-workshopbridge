@@ -8,8 +8,9 @@ WB_Config = {
     -- When true and the ZombieBuddy Java API is NOT present, WB_Main installs
     -- WB_DebugStub, which fakes the Java API with canned responses. This lets
     -- you verify the whole UI in-game without building the Java side.
-    -- Set to false for real use.
-    DEBUG_STUB = true,
+    -- Defaults to false: a shipped build must never report fake successes.
+    -- The Lua UI tests enable it explicitly (see tests/lua/test_ui.lua).
+    DEBUG_STUB = false,
 }
 
 -- Hardcoded English strings, kept in one table so localization can be

@@ -82,6 +82,10 @@ local tmp = (os.getenv("TMPDIR") or "/tmp") .. "/wb-luatest-dl"
 os.execute("mkdir -p " .. tmp)
 os.execute("ln -sfn " .. LUA_DIR .. " " .. tmp .. "/WorkshopBridge")
 package.path = tmp .. "/?.lua;" .. package.path
+require("WorkshopBridge/WB_Config")
+-- enable the canned debug stub explicitly: the shipped default is off
+-- (WB_Main installs the stub only when this is true)
+WB_Config.DEBUG_STUB = true
 require("WorkshopBridge/WB_Main")
 for _, h in ipairs(Events.OnGameBoot.handlers) do h() end
 
