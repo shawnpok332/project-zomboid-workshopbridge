@@ -52,6 +52,13 @@ public class WBTest {
             System.exit(2);
         }
 
+        // ---- 0. fork launch-mechanism workaround (before any process spawn) ----
+        String lmBefore = System.getProperty(Main.LAUNCH_MECHANISM_PROP);
+        Main.ensureForkLaunchMechanism();
+        String lmAfter = System.getProperty(Main.LAUNCH_MECHANISM_PROP);
+        check(lmBefore != null ? lmAfter.equals(lmBefore) : "FORK".equals(lmAfter),
+                "explicit launch mechanism respected, else FORK", lmAfter);
+
         // ---- 1. Json basics ----
         Object o = Json.parse("{\"a\":1,\"b\":[true,null],\"c\":\"x\\\"y\"}");
         Map<String, Object> m = Json.object(o);
