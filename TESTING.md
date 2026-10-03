@@ -75,6 +75,10 @@ first-run self-update). Not part of the offline suite and not run by default.
 Run it before a release, or whenever the Valve-facing code changes. Everything
 it writes stays in `tests/java/.test-work-online/` (gitignored).
 
+Linux note: steamcmd is a 32-bit binary, so the bootstrap step fails with
+install instructions if your system lacks the 32-bit runtime libraries
+(`sudo apt install lib32gcc-s1 lib32stdc++6` on Debian/Ubuntu).
+
 If the probe workshop item ever disappears, step 1 fails loudly - that means
 the world changed, not the test.
 

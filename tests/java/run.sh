@@ -11,10 +11,17 @@ set -u
 cd "$(dirname "$0")"  # tests/java
 HERE="$PWD"
 REPO="$(cd ../.. && pwd)"
-JH_BIN="$(command -v javac | xargs dirname)"
 
-# free port for the stub Steam API
-PORT="$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1",0)); print(s.getsockname()[1])')"
+for tool in javac java; do
+    if ! command -v "$tool" >/dev/null 2>&1; then
+        echo "error: '$tool' not found on PATH. Install a JDK 17+ first, e.g.:" >&2
+        echo "  Debian/Ubuntu: sudo apt install openjdk-17-jdk" >&2
+        echo "  Fedora:        sudo dnf install java-17-openjdk-devel" >&2
+        echo "  macOS:         brew install openjdk@17" >&2
+        exit 1
+    fi
+done
+JH_BIN="$(dirname "$(command -v javac)")"
 
 WORK="$HERE/.test-work"
 rm -rf "$WORK"
@@ -31,5 +38,4 @@ echo "running tests..."
     -Dwb.test.zomboid="$WORK/zomboid" \
     -Dwb.test.fakebin="$HERE/fakebin" \
     -Dwb.test.fixtures="$HERE/fixtures" \
-    -Dworkshopbridge.steamApiUrl="http://127.0.0.1:$PORT/" \
-    -cp "$WORK/classes" com.workshopbridge.WBTest "$PORT"
+    -cp "$WORK/classes" com.workshopbridge.WBTest

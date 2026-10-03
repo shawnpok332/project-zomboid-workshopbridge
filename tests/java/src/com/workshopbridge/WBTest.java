@@ -13,8 +13,9 @@ import java.util.function.Consumer;
 
 /**
  * Offline test harness. Run with:
- *   -Dwb.test.zomboid=<tmpdir> -Dworkshopbridge.steamApiUrl=http://127.0.0.1:PORT/
- * (the runner script sets these up).
+ *   -Dwb.test.zomboid=<tmpdir>
+ * (the runner script sets this up; the stub Steam API binds port 0 and the
+ * harness points WorkshopApi at it programmatically).
  */
 public class WBTest {
     static int failures = 0;
@@ -133,10 +134,8 @@ public class WBTest {
         Files.writeString(props.toPath(), "steamcmd.path=" + fakeExe + "\n");
 
         // ---- 4. check job with a stub Steam API: 111 updated, 222 gone ----
-        // NOTE: workshopbridge.steamApiUrl must be set via -D (with this port)
-        // before WorkshopApi loads.
-        int apiPort = Integer.parseInt(args[0]);
-        HttpServer api = HttpServer.create(new InetSocketAddress("127.0.0.1", apiPort), 0);
+        HttpServer api = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        int apiPort = api.getAddress().getPort();
         String apiJson = "{\"response\":{\"publishedfiledetails\":["
                 + "{\"publishedfileid\":\"111\",\"time_updated\":2000,"
                 + "\"result\":1}]}}";
@@ -147,7 +146,11 @@ public class WBTest {
             try (OutputStream os = ex.getResponseBody()) { os.write(b); }
         });
         api.start();
-        // NOTE: workshopbridge.steamApiUrl must be set via -D before WorkshopApi loads
+        // WorkshopApi reads its URL once, at class-load time: point it at the
+        // stub before its first use. Binding port 0 above means run.sh needs
+        // no free-port hack (and no python3).
+        System.setProperty("workshopbridge.steamApiUrl",
+                "http://127.0.0.1:" + apiPort + "/");
         JobManager jobs = new JobManager(backend);
         // Gate the live-HTTP checks on a plain probe of the stub server, not on
         // our code's error strings: in sandboxed environments loopback HTTP may
@@ -175,7 +178,7 @@ public class WBTest {
             String upAllId = jobs.submitUpdateAll();
             Map<String, Object> uast = awaitDone(jobs, upAllId);
             check("done".equals(uast.get("state")), "update-all completes", uast.get("error"));
-            check("111".equals(backend.workshopMap().getWorkshopId("FakeMod")),
+            check("111".equals(backend.workshopMap().getWorkshopId("FakeMod-111")),
                     "update-all re-records workshop->mod");
             String umsg = String.valueOf(uast.get("message"));
             check(umsg.contains("All mods up to date") && umsg.contains("222"),
@@ -200,9 +203,10 @@ public class WBTest {
         Map<String, Object> ust = awaitDone(jobs, upId);
         check("done".equals(ust.get("state")), "update completes: " + ust.get("state"),
                 ust.get("error"));
-        File installedInfo = new File(backend.modsDir(), "FakeMod/common/mod.info");
+        File installedInfo = new File(backend.modsDir(), "FakeMod-99999/common/mod.info");
         check(installedInfo.isFile(), "mod installed to mods dir");
-        check("99999".equals(backend.workshopMap().getWorkshopId("FakeMod")),
+        WorkshopMap.Entry e99999 = backend.workshopMap().snapshot().get("99999");
+        check(e99999 != null && e99999.modIds.contains("FakeMod-99999"),
                 "map records workshop->mod");
 
         // ---- 5b. steamcmd failure surfaces as a failed job, not a hang ----
@@ -294,6 +298,17 @@ public class WBTest {
         String exe = sc.installArchive(new File(tgzDir, "sc.tar.gz"), false, exeDir,
                 s -> {});
         check(new File(exe).isFile() && new File(exe).canExecute(), "installArchive extracts tar.gz", exe);
+
+        // ---- 12. 32-bit hint fires on the classic failure signatures ----
+        check(SteamCmd.missing32BitHint(
+                "did not identify as steamcmd (exit=127, output: .../linux32/steamcmd: No such file or directory)")
+                .contains("32-bit"), "32-bit hint on exit=127");
+        check(SteamCmd.missing32BitHint(
+                "error while loading shared libraries: libstdc++.so.6: cannot open shared object file")
+                .contains("32-bit"), "32-bit hint on shared libraries");
+        check(SteamCmd.missing32BitHint(
+                "did not identify as steamcmd (exit=1, output: nope)").isEmpty(),
+                "no 32-bit hint for other failures");
 
         System.out.println(failures == 0 ? "ALL TESTS PASSED" : failures + " FAILURES");
         System.exit(failures == 0 ? 0 : 1);

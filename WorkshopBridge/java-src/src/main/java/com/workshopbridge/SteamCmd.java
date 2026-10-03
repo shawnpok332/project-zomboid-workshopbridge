@@ -113,7 +113,8 @@ public final class SteamCmd {
                             + " proceeding anyway (first-run self-update?): " + override);
                     return f.getAbsolutePath();
                 }
-                overrideError = "steamcmd.path is not a working steamcmd (" + reason + "): " + override;
+                overrideError = "steamcmd.path is not a working steamcmd (" + reason + "): " + override
+                        + missing32BitHint(reason);
                 return null;
             }
             return f.getAbsolutePath();
@@ -244,7 +245,6 @@ public final class SteamCmd {
     }
 
     // ------------------------------------------------------------------
-    // ------------------------------------------------------------------
     // validation
     // ------------------------------------------------------------------
 
@@ -255,6 +255,25 @@ public final class SteamCmd {
     private static boolean isMac() {
         String os = System.getProperty("os.name", "").toLowerCase(Locale.ROOT);
         return os.contains("mac") || os.contains("darwin");
+    }
+
+    /**
+     * Targeted hint appended to validation failures that look like missing
+     * 32-bit runtime libraries (the classic Linux problem: steamcmd.sh execs
+     * a 32-bit binary, which dies with exit=127 / "No such file or directory"
+     * when the 32-bit loader is absent, even though every file exists).
+     * Returns "" when the failure looks like something else.
+     * Package-private so tests can cover the signatures.
+     */
+    static String missing32BitHint(String reason) {
+        String low = reason.toLowerCase(Locale.ROOT);
+        if (low.contains("shared librar") || low.contains("exit=127")) {
+            return " This usually means the 32-bit runtime libraries are missing."
+                    + " Debian/Ubuntu: sudo apt install lib32gcc-s1 lib32stdc++6 |"
+                    + " Arch: sudo pacman -S lib32-gcc-libs |"
+                    + " Fedora: sudo dnf install glibc.i686 libstdc++.i686 -- then retry.";
+        }
+        return "";
     }
 
     /**
@@ -381,12 +400,8 @@ public final class SteamCmd {
         // real download that follows will complete it.
         String reason = validateExecutable(exe);
         if (reason != null && !reason.startsWith("timed out")) {
-            if (reason.toLowerCase(Locale.ROOT).contains("shared librar")) {
-                throw new IOException("The downloaded steamcmd cannot run: missing 32-bit libraries. "
-                        + "Debian/Ubuntu: sudo apt install lib32gcc-s1 lib32stdc++6 | "
-                        + "Arch: pacman -S lib32-glibc | Fedora: glibc.i686 -- then retry.");
-            }
-            throw new IOException("Bootstrapped steamcmd failed validation: " + reason);
+            throw new IOException("Bootstrapped steamcmd failed validation: " + reason
+                    + missing32BitHint(reason));
         }
         cachedExe = exe;
         log.accept("steamcmd ready at " + exe

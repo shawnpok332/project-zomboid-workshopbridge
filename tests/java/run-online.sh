@@ -16,7 +16,17 @@ set -u
 cd "$(dirname "$0")"  # tests/java
 HERE="$PWD"
 REPO="$(cd ../.. && pwd)"
-JH_BIN="$(command -v javac | xargs dirname)"
+
+for tool in javac java; do
+    if ! command -v "$tool" >/dev/null 2>&1; then
+        echo "error: '$tool' not found on PATH. Install a JDK 17+ first, e.g.:" >&2
+        echo "  Debian/Ubuntu: sudo apt install openjdk-17-jdk" >&2
+        echo "  Fedora:        sudo dnf install java-17-openjdk-devel" >&2
+        echo "  macOS:         brew install openjdk@17" >&2
+        exit 1
+    fi
+done
+JH_BIN="$(dirname "$(command -v javac)")"
 
 WORK="$HERE/.test-work-online"
 rm -rf "$WORK"
