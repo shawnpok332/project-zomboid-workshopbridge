@@ -42,7 +42,7 @@ public final class SteamCmdApi {
     @LuaMethod(name = "wbGetWorkshopId", global = true)
     public static String wbGetWorkshopId(String modId) {
         try {
-            return modId == null ? null : Backend.get().workshopMap().getWorkshopId(modId);
+            return modId == null ? null : Backend.get().getWorkshopId(modId);
         } catch (Throwable t) {
             return null;
         }

@@ -200,6 +200,16 @@ check(WB_CountUpdateAvailable() == 0, "update-all clears marks")
 check(ms.wbUpdateAllBtn.title == "Update all", "update-all title reset")
 check((ms.reloaded or 0) >= 1, "reloadMods called after update-all")
 
+-- ---------- check flashes its result summary ----------
+ms.wbCheckBtn.onclick()
+tick(80) -- stub check job completes (~72 ticks)
+local sumPanel = ms.wbProgressPanel
+check(sumPanel:isVisible(), "check result flashed")
+check(sumPanel.wbLabel.name == "Check complete", "flash shows check summary",
+    sumPanel.wbLabel.name)
+tick(200) -- flash timeout expires
+check(not sumPanel:isVisible(), "result flash auto-hides")
+
 -- ---------- unknown job is dropped gracefully ----------
 local doneState = nil
 WB_TrackJob("no-such-job", { onDone = function(st) doneState = st end })

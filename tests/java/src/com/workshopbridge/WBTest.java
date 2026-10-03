@@ -134,6 +134,21 @@ public class WBTest {
         corrupt.load(); // must not throw
         check(corrupt.snapshot().isEmpty(), "corrupt map loads empty");
 
+        // ---- 3b2. mod.info id parsing: B42 "42.0" layout + self-healing ----
+        File typoMod = new File(backend.modsDir(), "True Weigth/42.0");
+        typoMod.mkdirs();
+        writeFile(new File(typoMod, "mod.info"), "id=TrueWeight\n");
+        check("TrueWeight".equals(ModInstaller.readModId(new File(backend.modsDir(), "True Weigth"))),
+                "readModId parses 42.0/mod.info");
+        // recorded under the (typo'd) folder name, as older versions did
+        backend.workshopMap().record("3768669395", List.of("True Weigth"), 1000L);
+        check(backend.workshopMap().getWorkshopId("TrueWeight") == null,
+                "typo'd entry misses direct lookup");
+        check("3768669395".equals(backend.getWorkshopId("TrueWeight")),
+                "self-healing lookup finds workshop id via mod.info");
+        check("3768669395".equals(backend.workshopMap().getWorkshopId("TrueWeight")),
+                "entry repaired to true mod id");
+
         // ---- 3c. point steamcmd at the fake (used by every job test below) ----
         File props = new File(zomboidDir, "workshopbridge.properties");
         String fakeExe = new File(System.getProperty("wb.test.fakebin"),

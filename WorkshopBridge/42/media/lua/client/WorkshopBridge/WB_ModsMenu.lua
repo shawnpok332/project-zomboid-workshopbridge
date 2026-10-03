@@ -79,6 +79,10 @@ local function WB_OnCheckAll(ms)
             else
                 print("[WorkshopBridge] check for updates complete: "
                     .. n .. " update(s) available")
+                -- the job's final message is the summary ("Everything is up
+                -- to date" / "N mod(s) have updates"); flash it briefly so
+                -- a clean check isn't just silence
+                WB_FlashMessage(ms, (st and st.message) or WB_Text.Checking)
             end
         end,
     })
@@ -105,6 +109,7 @@ local function WB_OnUpdateAll(ms)
                 WB_ShowError(ms, WB_Text.UpdateFailed .. ": " .. WB_ShortError(st.error, 64))
             else
                 print("[WorkshopBridge] update-all complete")
+                WB_FlashMessage(ms, (st and st.message) or WB_Text.Updating)
                 -- rescan so newly downloaded/changed mods appear; then make
                 -- sure our row wrap survived (re-applied defensively)
                 if ms.reloadMods then pcall(function() ms:reloadMods() end) end

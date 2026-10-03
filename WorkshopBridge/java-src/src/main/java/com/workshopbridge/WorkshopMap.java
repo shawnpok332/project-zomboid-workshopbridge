@@ -54,6 +54,32 @@ public final class WorkshopMap {
         return null;
     }
 
+    /**
+     * Repairs a stale recorded mod id (e.g. a folder name recorded when the
+     * mod.info layout wasn't parsed, or an author typo in the folder name):
+     * swaps {@code oldModId} for {@code newModId} in the workshop item's
+     * entry and persists. No-op when the entry or old id is absent.
+     */
+    public synchronized void replaceModId(String workshopId, String oldModId, String newModId) {
+        Entry e = items.get(workshopId);
+        if (e == null || oldModId == null || newModId == null
+                || oldModId.equals(newModId)) {
+            return;
+        }
+        List<String> ids = new ArrayList<>(e.modIds);
+        boolean changed = false;
+        for (int i = 0; i < ids.size(); i++) {
+            if (ids.get(i).equals(oldModId) && !ids.contains(newModId)) {
+                ids.set(i, newModId);
+                changed = true;
+            }
+        }
+        if (changed) {
+            items.put(workshopId, new Entry(ids, e.timeUpdated, e.lastDownloaded));
+            save();
+        }
+    }
+
     public synchronized void record(String workshopId, List<String> modIds, long timeUpdated) {
         items.put(workshopId,
                 new Entry(modIds, timeUpdated, System.currentTimeMillis() / 1000L));

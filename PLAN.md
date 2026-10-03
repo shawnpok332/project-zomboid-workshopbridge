@@ -95,8 +95,17 @@ planned properly.
   - **Resolved Oct 2026**: with the update() fallback pump in place, the
     poll delivers: `nil -> running -> done` transitions fire and completion
     lines print in-game. Heartbeat kept but quieted (only with active
-    jobs). **Still to confirm: the panel actually renders visibly**
-    (logic runs; visual confirmation pending).
+    jobs). Panel confirmed rendering visually by user.
+  - Check/update-all now flash their result summary ("Everything is up to
+    date" / "N mod(s) have updates") instead of going silent on success.
+- [ ] **Mod id vs folder-name mismatch (bug, fixed Oct 2026).** A mod whose
+  folder name differs from its mod.info `id=` (e.g. author typo: folder
+  "True Weigth", id "TrueWeight") showed "Unknown workshop ID". Root cause:
+  `readModId` didn't know the B42 `42.0/mod.info` layout, so it fell back to
+  the folder name when recording. Fixed: added `42.0/mod.info` to the
+  candidates, plus a self-healing reverse lookup (`Backend.getWorkshopId`)
+  that repairs stale folder-name entries on the spot by scanning mod.info.
+  Existing bad entries fix themselves on next lookup; no map wipe needed.
 
 - [ ] **Per-mod "Updating..." label stuck / cleared on selection change (bug).**
   Clicking a mod's Update button shows "Updating...", but it does not clear

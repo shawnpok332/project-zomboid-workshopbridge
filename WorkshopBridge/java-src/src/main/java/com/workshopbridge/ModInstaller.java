@@ -201,9 +201,11 @@ public final class ModInstaller {
 
     /** The {@code id=} value from mod.info, falling back to the folder name. */
     static String readModId(File modDir) {
-        // B42 layouts first, then legacy flat mod.info
+        // B42 layouts first, then legacy flat mod.info. B42 ships versioned
+        // dirs as "42.0" (observed on real installs), keep "42" as well.
         String[] candidates = {
-                "common/mod.info", "42/mod.info", "41/mod.info", "40/mod.info", "mod.info"
+                "common/mod.info", "42.0/mod.info", "42/mod.info",
+                "41/mod.info", "40/mod.info", "mod.info"
         };
         for (String rel : candidates) {
             File f = new File(modDir, rel);

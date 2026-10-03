@@ -72,6 +72,37 @@ public final class Backend {
         return workshopMap;
     }
 
+    /**
+     * PZ mod id -> workshop id, with self-healing: when the map has no entry
+     * recording {@code modId}, scan the installed mods; a folder whose
+     * mod.info id matches but which was recorded under its folder name
+     * (author typo in the folder, or a mod.info layout we didn't parse at
+     * install time) gets its entry repaired on the spot.
+     */
+    public synchronized String getWorkshopId(String modId) {
+        String wsid = workshopMap.getWorkshopId(modId);
+        if (wsid != null || modId == null || modId.isEmpty()) {
+            return wsid;
+        }
+        File[] dirs = modsDir.listFiles(File::isDirectory);
+        if (dirs == null) {
+            return null;
+        }
+        for (File dir : dirs) {
+            if (!modId.equals(ModInstaller.readModId(dir))) {
+                continue;
+            }
+            String byFolder = workshopMap.getWorkshopId(dir.getName());
+            if (byFolder != null) {
+                workshopMap.replaceModId(byFolder, dir.getName(), modId);
+                System.out.println("[WorkshopBridge] repaired map entry for "
+                        + modId + " (was recorded as folder \"" + dir.getName() + "\")");
+                return byFolder;
+            }
+        }
+        return null;
+    }
+
     public SteamCmd steamCmd() {
         return steamCmd;
     }
