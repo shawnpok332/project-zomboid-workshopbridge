@@ -251,6 +251,44 @@ public class WBTest {
             apiJson.set("{\"response\":{\"publishedfiledetails\":["
                     + "{\"publishedfileid\":\"111\",\"time_updated\":2000,"
                     + "\"result\":1}]}}");
+
+            // ---- 4c4. check re-reads the map after the API round trip ----
+            // 33333 is outdated per the API (@2000 vs recorded 1000); an
+            // update installing it while the check is in flight (slow API)
+            // must not resurrect a stale "update available" badge.
+            backend.workshopMap().record("33333", List.of("FakeMod-33333"), 1000L);
+            apiJson.set("{\"response\":{\"publishedfiledetails\":["
+                    + "{\"publishedfileid\":\"33333\",\"time_updated\":2000,"
+                    + "\"result\":1}]}}");
+            apiSlow.set(true);
+            String raceCheckId = jobs.submitCheck();
+            Thread.sleep(500); // let the check reach the API wait
+            backend.workshopMap().record("33333", List.of("FakeMod-33333"), 2000L);
+            apiSlow.set(false);
+            Map<String, Object> raceSt = awaitDone(jobs, raceCheckId);
+            List<Object> raceUpdates = Json.array(raceSt.get("updates"));
+            check(raceUpdates != null && raceUpdates.isEmpty(),
+                    "check re-reads map: no stale badge for just-updated item",
+                    raceUpdates);
+
+            // ---- 4c5. check excludes items with a download in flight ----
+            // 99998 is slow in the fake steamcmd (sleeps 2s mid-download);
+            // the check must not flag it while those bytes are on the way.
+            backend.workshopMap().record("99998", List.of("FakeMod-99998"), 1000L);
+            apiJson.set("{\"response\":{\"publishedfiledetails\":["
+                    + "{\"publishedfileid\":\"99998\",\"time_updated\":2000,"
+                    + "\"result\":1}]}}");
+            String slowUpId = jobs.submitUpdate("99998");
+            Thread.sleep(500); // let the download get in flight
+            String flightCheckId = jobs.submitCheck();
+            Map<String, Object> flightSt = awaitDone(jobs, flightCheckId);
+            List<Object> flightUpdates = Json.array(flightSt.get("updates"));
+            check(flightUpdates != null && flightUpdates.isEmpty(),
+                    "check excludes in-flight download", flightUpdates);
+            awaitDone(jobs, slowUpId);
+            apiJson.set("{\"response\":{\"publishedfiledetails\":["
+                    + "{\"publishedfileid\":\"111\",\"time_updated\":2000,"
+                    + "\"result\":1}]}}");
         }
         api.stop(0);
 

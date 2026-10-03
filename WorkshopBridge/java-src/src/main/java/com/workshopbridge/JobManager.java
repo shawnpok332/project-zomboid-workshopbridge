@@ -7,6 +7,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
@@ -75,6 +76,13 @@ public final class JobManager {
     private final ConcurrentHashMap<String, Job> jobs = new ConcurrentHashMap<>();
     /** The currently running check job, if any: repeat clicks coalesce onto it. */
     private volatile Job activeCheck;
+    /**
+     * Workshop ids with a download+install currently in flight (on the
+     * single download thread). A concurrent check must not report these as
+     * "update available": the new bits are on their way and its map
+     * snapshot predates them.
+     */
+    private final Set<String> inFlight = ConcurrentHashMap.newKeySet();
 
     JobManager(Backend backend) {
         this.backend = backend;
@@ -145,17 +153,25 @@ public final class JobManager {
         }
         List<String> withUpdates = new ArrayList<>();
         List<String> missing = new ArrayList<>();
+        // Re-read the map AFTER the network round trip: an update job may
+        // have installed items while we were waiting, and comparing against
+        // the pre-request snapshot would resurrect stale "update available"
+        // badges for just-updated mods.
+        Map<String, WorkshopMap.Entry> fresh = backend.workshopMap().snapshot();
         int i = 0;
         for (String wsid : ids) {
             i++;
             job.done = i;
             Long tu = remote.get(wsid);
-            WorkshopMap.Entry e = items.get(wsid);
+            WorkshopMap.Entry e = fresh.get(wsid);
+            if (e == null) {
+                continue; // unmapped while we were away; nothing to compare
+            }
             if (tu == null) {
                 // the API had no entry: item deleted or made private
                 missing.add(wsid);
                 job.message = "Checked " + i + "/" + ids.size();
-            } else if (tu > e.timeUpdated) {
+            } else if (!inFlight.contains(wsid) && tu > e.timeUpdated) {
                 withUpdates.addAll(e.modIds);
                 job.message = "Update available: " + wsid;
             } else {
@@ -242,16 +258,21 @@ public final class JobManager {
     }
 
     private void downloadAndInstall(String workshopId, long timeUpdated) throws Exception {
-        File itemDir = backend.steamCmd().download(
-                workshopId, backend.cacheDir(), line -> System.out.println("[WorkshopBridge] " + line));
-        // staging lives under the workshop cache (same filesystem as mods/,
-        // so the swap renames stay atomic) and outside mods/ itself, where
-        // the game's file watcher would trip over the transient backup dirs
-        List<String> modIds = ModInstaller.install(
-                itemDir, backend.modsDir(),
-                new File(backend.cacheDir(), ".install-staging"),
-                line -> System.out.println("[WorkshopBridge] " + line));
-        backend.workshopMap().record(workshopId, modIds, timeUpdated);
+        inFlight.add(workshopId);
+        try {
+            File itemDir = backend.steamCmd().download(
+                    workshopId, backend.cacheDir(), line -> System.out.println("[WorkshopBridge] " + line));
+            // staging lives under the workshop cache (same filesystem as mods/,
+            // so the swap renames stay atomic) and outside mods/ itself, where
+            // the game's file watcher would trip over the transient backup dirs
+            List<String> modIds = ModInstaller.install(
+                    itemDir, backend.modsDir(),
+                    new File(backend.cacheDir(), ".install-staging"),
+                    line -> System.out.println("[WorkshopBridge] " + line));
+            backend.workshopMap().record(workshopId, modIds, timeUpdated);
+        } finally {
+            inFlight.remove(workshopId);
+        }
     }
 
     private void fail(Job job, Throwable t) {

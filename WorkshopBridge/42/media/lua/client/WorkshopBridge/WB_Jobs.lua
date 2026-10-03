@@ -3,17 +3,20 @@
 -- Java downloads/checks run on background threads; Lua polls job status so
 -- the game thread never blocks. The poll runs on Events.OnTick with a
 -- fallback pump from the Mods screen's per-frame update() (the tick doesn't
--- reliably fire while a main-menu screen is open); it is idempotent, so
--- both pumps running at once is harmless. Status table shape is defined in
--- docs/ARCHITECTURE.md ("Job status shape").
+-- reliably fire while a main-menu screen is open). Polling is idempotent,
+-- so both pumps running at once is safe; UI timers (flash, throbber) are
+-- advanced by the fallback pump only, so they can't run double speed.
+-- Status table shape is defined in docs/ARCHITECTURE.md ("Job status shape").
 require "WorkshopBridge/WB_Config"
 require "WorkshopBridge/WB_Json"
 
 local activeJobs = {}       -- jobId -> { onUpdate=fn, onDone=fn }
 local lastJobState = {}     -- jobId -> last seen state (for transition logging)
 local updateAvailable = {}  -- modId -> true (set by check jobs)
-local wbTick = 0
+local wbTick = 0            -- advanced ONLY by the Mods-screen fallback pump
 local tickHooked = false
+local currentJob = nil      -- jobId whose poll callback is currently running
+local panelOwner = nil      -- jobId owning the shared progress panel, if any
 
 -- ---------- job tracking ----------
 
@@ -53,8 +56,19 @@ function WB_EnsurePolling()
     end
 end
 
-function WB_PollJobs()
+-- Fallback pump entry point for the Mods screen's per-frame update()
+-- (see WB_ModsMenu). This is the ONLY place wbTick advances: both pumps
+-- call WB_PollJobs, so advancing the tick there would run the flash and
+-- throbber timers at double speed whenever both pumps run.
+function WB_FallbackPump()
     wbTick = wbTick + 1
+    WB_PollJobs()
+end
+
+function WB_PollJobs()
+    -- NOTE: wbTick is advanced ONLY by the Mods-screen fallback pump (see
+    -- WB_ModsMenu), not here. Both pumps call this function, and advancing
+    -- the tick in both would run flash/throbber timers at double speed.
     -- Periodic heartbeat while jobs are in flight: shows the poll is alive
     -- and what it sees. Silent when idle.
     if wbTick % 600 == 1 then
@@ -74,6 +88,9 @@ function WB_PollJobs()
             local dok, dec = pcall(WB_JsonDecode, s)
             if dok then st = dec end
         end
+        -- currentJob lets WB_ShowProgress attribute panel paints to the job
+        -- whose callback is running (panel ownership, below)
+        currentJob = jobId
         if type(st) == "table" then
             if lastJobState[jobId] ~= st.state then
                 print("[WorkshopBridge] job " .. tostring(jobId) .. " state: "
@@ -84,15 +101,18 @@ function WB_PollJobs()
             if st.state ~= "running" then
                 activeJobs[jobId] = nil
                 lastJobState[jobId] = nil
+                if panelOwner == jobId then panelOwner = nil end
                 if cb.onDone then pcall(cb.onDone, st) end
             end
         else
             -- unknown job id or Java threw: drop it, report once
             activeJobs[jobId] = nil
             lastJobState[jobId] = nil
+            if panelOwner == jobId then panelOwner = nil end
             print("[WorkshopBridge] job " .. tostring(jobId) .. " failed: " .. tostring(st))
             if cb.onDone then pcall(cb.onDone, { state = "failed", error = tostring(st) }) end
         end
+        currentJob = nil
     end
     WB_TickProgressPanel(wbTick)
 end
@@ -138,6 +158,7 @@ local progressBase = ""
 local progressVisible = false
 local flashHideAt = nil
 local errorStuck = false
+local errorActive = nil     -- activeJobs snapshot when a sticky error was set
 
 local function WB_CurrentPanel()
     if progressParent and progressParent.wbProgressPanel then
@@ -162,7 +183,7 @@ function WB_EnsureProgressPanel(parent)
     -- click dismisses a stuck error (instance-level override; vanilla
     -- ISPanel:onMouseUp is a no-op unless moveWithMouse)
     panel.onMouseUp = function(self, px, py)
-        WB_HideProgress()
+        WB_HideProgress(true)
     end
     local label = ISLabel:new(12, 14, 20, "", 1, 1, 1, 1, UIFont.Small, true)
     label:initialise()
@@ -179,17 +200,46 @@ function WB_EnsureProgressPanel(parent)
     return panel
 end
 
-function WB_ShowProgress(parent, message)
+-- Shared painter behind WB_ShowProgress / WB_ShowError.
+local function WB_PaintPanel(parent, message, isError)
     if not parent then return end
+    if errorStuck and not isError and currentJob
+            and errorActive and errorActive[currentJob] then
+        -- a stuck error holds the panel against jobs that were already
+        -- running when it was set; anything newer clears it below
+        return
+    end
+    if not isError and panelOwner and panelOwner ~= currentJob
+            and activeJobs[panelOwner] then
+        -- Panel ownership: concurrent jobs share the one panel. The first
+        -- job to paint owns it until it completes; a concurrent job's
+        -- paints are ignored so the label can't flicker between two
+        -- messages. Ownership is released when the owner completes (see
+        -- WB_PollJobs) and passes to the next painter. Errors always
+        -- paint: they steal the panel.
+        return
+    end
     local panel = WB_EnsureProgressPanel(parent)
     if not panel then return end
     progressParent = parent
+    panelOwner = currentJob
     progressBase = message or ""
     flashHideAt = nil
-    errorStuck = false
+    if isError then
+        errorStuck = true
+        errorActive = {}
+        for id in pairs(activeJobs) do errorActive[id] = true end
+    else
+        errorStuck = false
+        errorActive = nil
+    end
     WB_SetLabel(panel.wbLabel, progressBase)
     panel:setVisible(true)
     progressVisible = true
+end
+
+function WB_ShowProgress(parent, message)
+    WB_PaintPanel(parent, message, false)
 end
 
 -- Show an error in the progress panel and keep it there until the user
@@ -197,16 +247,14 @@ end
 -- failure; errors need to wait for the user, not the other way round.
 function WB_ShowError(parent, message)
     if not parent then return end
-    WB_ShowProgress(parent, message)
-    errorStuck = true
-    flashHideAt = nil
+    WB_PaintPanel(parent, message, true)
     local panel = WB_CurrentPanel()
     if panel then
         WB_SetLabel(panel.wbLabel, progressBase .. "  (click to dismiss)")
     end
 end
 
--- Show a message briefly, then auto-hide (for errors).
+-- Show a message briefly, then auto-hide (for check/update result summaries).
 function WB_FlashMessage(parent, message)
     WB_ShowProgress(parent, message)
     flashHideAt = wbTick + 150 -- ~2.5s at 60 ticks/s
@@ -214,7 +262,9 @@ end
 
 function WB_TickProgressPanel(tick)
     if flashHideAt and tick >= flashHideAt then
-        WB_HideProgress()
+        -- flash done: force-hide even if a job is still tracked, its next
+        -- onUpdate repaints immediately
+        WB_HideProgress(true)
         return
     end
     if errorStuck then return end -- stuck error: no throbber dots, no auto-hide
@@ -225,10 +275,20 @@ function WB_TickProgressPanel(tick)
     end
 end
 
-function WB_HideProgress()
+function WB_HideProgress(force)
+    -- A completing job must not hide a still-running job's status, nor a
+    -- stuck error awaiting dismissal: hide only when nothing needs the
+    -- panel, unless forced (user click-dismiss or flash expiry, where a
+    -- running job repaints on its next update).
+    if not force then
+        if errorStuck then return end
+        for _ in pairs(activeJobs) do return end
+    end
     flashHideAt = nil
     errorStuck = false
+    errorActive = nil
     progressVisible = false
+    panelOwner = nil
     local panel = WB_CurrentPanel()
     if panel then panel:setVisible(false) end
 end

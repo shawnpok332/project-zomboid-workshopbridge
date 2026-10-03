@@ -32,6 +32,8 @@ local function WB_Init()
     if not WB_ApiKind then
         print("[WorkshopBridge] ZombieBuddy Java API not found and DEBUG_STUB is off.")
         print("[WorkshopBridge] Install ZombieBuddy (see README), then enable this mod.")
+        -- still hook the menu: show in-game guidance instead of silence
+        WB_HookModsMenuNoApi()
         return
     end
     WB_HookModsMenu()

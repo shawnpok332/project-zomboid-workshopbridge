@@ -33,6 +33,8 @@ Staged plan agreed with joshua. Each phase ends with a review checkpoint - we do
 
 Moved to Phase 4 (hardening, not blockers): workshop item with multiple mods; anonymous-login rejection -> account-login fallback (interactive, never store credentials); Steam Guard UX; job cancellation. Done Oct 2026: malformed Steam API JSON now fails the check (`IOException`) instead of looking like an empty/deleted result; failed steamcmd can no longer install a stale cache (exit code enforced); timed-out steamcmd is waited on before the next serialized job starts; repeat check clicks coalesce onto the running job; per-update timestamp falls back to the previously recorded one instead of the wall clock on API failure.
 
+Follow-up audit (Oct 2026), all addressed: check re-reads the map after its API round trip and skips in-flight downloads (no stale badges when an update lands mid-check); shared progress panel has ownership (first painter wins, no flicker; a completing job never hides a running job's status); UI timers advance only in the fallback pump (no more double-speed flashes when both pumps run); no-backend path now shows an in-game ZombieBuddy guidance label instead of a silent menu; README `steamcmd.path` example uses forward slashes (single backslashes are properties escapes) with the validation error hinting the same; README row/panel state wording corrected; RESEARCH.md steamcmd-discovery note marked superseded.
+
 ## Phase 4 - Harden + release
 
 - Remaining edge cases from Phase 3 (see above).

@@ -37,4 +37,6 @@ WB_Text = {
     Updating         = "Updating...",
     CheckFailed      = "Check failed",
     UpdateFailed     = "Update failed",
+    -- shown in the Mods menu when the Java backend is absent
+    NeedsZombieBuddy = "WorkshopBridge: install ZombieBuddy to enable workshop downloads",
 }

@@ -222,7 +222,7 @@ check(panel.wbStatusLabel.name == WB_Text.UpdateAvailableBadge,
     "panel badge refreshed by check")
 check(panel.wbUpdateBtn.title == WB_Text.Update,
     "button title refreshed by check", panel.wbUpdateBtn.title)
-tick(200) -- flash timeout expires
+for _ = 1, 200 do ms:update() end -- fallback pump advances the flash timer
 check(not sumPanel:isVisible(), "result flash auto-hides")
 
 -- ---------- unknown job is dropped gracefully ----------
@@ -236,7 +236,7 @@ WB_FlashMessage(ms, "boom")
 local flashPanel = ms.wbProgressPanel
 check(flashPanel:isVisible(), "flash panel visible")
 check(flashPanel.wbLabel.name == "boom", "flash shows message", flashPanel.wbLabel.name)
-tick(200)
+for _ = 1, 200 do ms:update() end -- fallback pump advances the flash timer
 -- progress panel should have been hidden by the flash timeout
 check(not flashPanel:isVisible(), "flash auto-hides after timeout")
 
@@ -250,6 +250,110 @@ tick(300)
 check(errPanel:isVisible(), "error panel sticks (no auto-hide)")
 errPanel:onMouseUp(errPanel, 10, 10) -- click dismisses
 check(not errPanel:isVisible(), "click dismisses error panel")
+
+-- ---------- UI timers advance only via the fallback pump ----------
+WB_FlashMessage(ms, "timer check")
+tick(300) -- OnTick alone must not expire the flash
+check(ms.wbProgressPanel:isVisible(), "OnTick pump does not advance flash timer")
+for _ = 1, 200 do ms:update() end -- fallback pump advances timers
+check(not ms.wbProgressPanel:isVisible(), "fallback pump expires the flash")
+
+-- ---------- concurrent jobs: panel ownership ----------
+-- two jobs share the one panel: the first painter owns it (no flicker),
+-- and a completing job must not hide the still-running job's status.
+local realStatusOw = wbGetJobStatus
+wbGetJobStatus = function(jobId)
+    if jobId == "owner-a" then
+        return '{"state":"running","done":0,"total":1,"message":"A working"}'
+    end
+    return '{"state":"running","done":0,"total":1,"message":"B working"}'
+end
+WB_TrackJob("owner-a", {
+    onUpdate = function(st) WB_ShowProgress(ms, st.message) end,
+    onDone = function(st) WB_HideProgress() end, -- must not hide B
+})
+WB_TrackJob("owner-b", {
+    onUpdate = function(st) WB_ShowProgress(ms, st.message) end,
+})
+tick(3)
+local firstLabel = ms.wbProgressPanel.wbLabel.name
+check(firstLabel:find("A working") ~= nil or firstLabel:find("B working") ~= nil,
+    "panel shows one concurrent job's status", firstLabel)
+tick(3)
+check(ms.wbProgressPanel.wbLabel.name == firstLabel,
+    "no flicker between concurrent jobs", ms.wbProgressPanel.wbLabel.name)
+wbGetJobStatus = function(jobId)
+    if jobId == "owner-a" then
+        return '{"state":"done","done":1,"total":1,"message":"A done"}'
+    end
+    return '{"state":"running","done":0,"total":1,"message":"B working"}'
+end
+tick(3)
+check(ms.wbProgressPanel:isVisible(),
+    "completing job does not hide the running job's panel")
+check(ms.wbProgressPanel.wbLabel.name:find("B working") ~= nil,
+    "ownership passes to the remaining job", ms.wbProgressPanel.wbLabel.name)
+wbGetJobStatus = function(jobId)
+    return '{"state":"done","done":1,"total":1,"message":"done"}'
+end
+tick(2) -- drain both jobs so later tests start clean
+wbGetJobStatus = realStatusOw
+
+-- ---------- sticky error vs. concurrent job ----------
+-- a failing job's error must show even with another job running, and
+-- neither the running job's paints nor the other job's completion may
+-- clear it before the user dismisses it.
+local realStatusErr = wbGetJobStatus
+wbGetJobStatus = function(jobId)
+    if jobId == "err-a" then
+        return '{"state":"failed","done":0,"total":1,"error":"boom"}'
+    end
+    return '{"state":"running","done":0,"total":1,"message":"B working"}'
+end
+WB_TrackJob("err-a", {
+    onUpdate = function(st) WB_ShowProgress(ms, st.message) end,
+    onDone = function(st)
+        WB_HideProgress()
+        WB_ShowError(ms, "kaput: " .. WB_ShortError(st.error, 32))
+    end,
+})
+WB_TrackJob("err-b", {
+    onUpdate = function(st) WB_ShowProgress(ms, st.message) end,
+    onDone = function(st) WB_HideProgress() end, -- must not clear the error
+})
+tick(3)
+check(ms.wbProgressPanel:isVisible(),
+    "failed job's error shows despite a concurrent job")
+check(ms.wbProgressPanel.wbLabel.name:find("kaput") ~= nil,
+    "running job does not erase the stuck error", ms.wbProgressPanel.wbLabel.name)
+wbGetJobStatus = function(jobId)
+    return '{"state":"done","done":1,"total":1,"message":"done"}'
+end
+tick(2) -- err-b completes
+check(ms.wbProgressPanel:isVisible(),
+    "completing job does not hide a stuck error")
+ms.wbProgressPanel:onMouseUp(ms.wbProgressPanel, 10, 10)
+check(not ms.wbProgressPanel:isVisible(), "click dismisses the stuck error")
+wbGetJobStatus = realStatusErr
+
+-- ---------- no-backend guidance label ----------
+-- as WB_Main does when the Java API is absent: the menu still hooks,
+-- showing guidance instead of a silent empty menu
+ModSelector.wbHooked = nil
+local msNoApi = setmetatable({ x = 0, y = 0, width = 1024, height = 768, children = {} },
+    { __index = UIElement })
+msNoApi.mapOrderbtn = ISButton:new(700, 710, 100, 30, "MapsOrder", msNoApi, function() end)
+local prevInstance = ModSelector.instance
+ModSelector.instance = msNoApi
+WB_HookModsMenuNoApi()
+ModSelector.instance = prevInstance
+check(msNoApi.wbGuidanceAdded, "guidance label added when backend absent")
+local guidanceText = nil
+for _, c in ipairs(msNoApi.children) do
+    if c.name == WB_Text.NeedsZombieBuddy then guidanceText = c.name end
+end
+check(guidanceText ~= nil, "guidance label shows the ZombieBuddy message")
+check(msNoApi.wbCheckBtn == nil, "no update buttons without backend")
 
 -- ---------- update() fallback pump ----------
 check(ms.wbUpdatePumped, "update() pump installed on menu instance")

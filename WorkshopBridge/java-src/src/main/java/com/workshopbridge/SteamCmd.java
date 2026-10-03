@@ -125,7 +125,9 @@ public final class SteamCmd {
         if (override != null) {
             File f = new File(override);
             if (!f.isFile()) {
-                overrideError = "steamcmd.path points at a missing file: " + override;
+                overrideError = "steamcmd.path points at a missing file: " + override
+                        + " (use forward slashes, e.g. C:/steamcmd/steamcmd.exe;"
+                        + " single backslashes are properties escapes)";
                 return null;
             }
             String reason = validateExecutable(f.getAbsolutePath());

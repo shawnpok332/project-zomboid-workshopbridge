@@ -17,10 +17,12 @@ Runs, in order:
    PZ globals and walks the whole flow: boot, menu hook, three-state per-mod panel
    (Force update / Managed by Steam / Unknown workshop ID), progress panel
    (eager per-screen build, visible during jobs, flash auto-hide, sticky
-   click-to-dismiss errors), check-for-updates (update badges on rows,
+   click-to-dismiss errors, ownership across concurrent jobs, sticky error
+   surviving concurrent jobs), check-for-updates (update badges on rows,
    per-mod button flips to "Update", result summary flash), per-mod update
-   (button back to "Force update" when done), update-all, unknown jobs, and
-   the `update()` fallback job pump.
+   (button back to "Force update" when done), update-all, unknown jobs,
+   UI timers advancing only via the fallback pump, the
+   `update()` fallback job pump, and the no-backend ZombieBuddy guidance label.
 3. **Download dialog** (`test_download.lua`) - the workshop-ID/URL parser plus the
    download flow: dialog open/validate/cancel, fake download job, `reloadMods`
    on completion.
@@ -62,7 +64,9 @@ Covered:
   steamcmd failure surfacing as a failed job with the cause in `error`,
   download serialization (second download reports "Queued...", never overlaps),
   repeat checks coalesce onto the running job, malformed API response fails the
-  check instead of reporting "up to date"
+  check instead of reporting "up to date", check re-reads the map after the
+  API round trip (no stale badges for just-updated items) and excludes
+  in-flight downloads
 - `SteamCmd`: explicit-path override, fake download to install to map
   recording, `installArchive` extracting a real `.tar.gz`, nonzero exit with a
   stale cache rejected (no reinstalling the old tree as if fresh), timed-out

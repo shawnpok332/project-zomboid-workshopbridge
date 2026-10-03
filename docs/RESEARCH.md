@@ -31,7 +31,7 @@ Sources: [pz-modding-guide](https://github.com/cocolabs/pz-modding-guide) (Expos
 - Files land in `<steamcmd>/steamapps/workshop/content/108600/<workshopID>/`. Use `+force_install_dir <dir>` **before** `+login` to redirect into our own cache dir.
 - Layout inside: `mods/<ModID>/mod.info` (+ `preview.png`, `workshop.txt`). Install = copy inner `mods/*` into `Zomboid/mods/`. The `id=` line in `mod.info` is the ID the game uses.
 - Mod folders: Windows `%USERPROFILE%\Zomboid\mods`, Linux/macOS `~/Zomboid/mods`.
-- Windows: portable zip from Valve (`client-update.steamstatic.com/installer/steamcmd.zip`), self-updates on first run. Detection = PATH + common locations + user-configured path.
+- Windows: portable zip from Valve (`client-update.steamstatic.com/installer/steamcmd.zip`), self-updates on first run. Detection (historical note, superseded): this originally said PATH + common locations + user-configured path. The implementation deliberately does NOT search PATH or guess locations (a wrong steamcmd is worse than none); it checks the configured `steamcmd.path` override, then its own managed copy under the workshop cache (bootstrapping from Valve's CDN if absent). See `docs/ARCHITECTURE.md` ("First run / missing pieces").
 - Linux: `steamcmd_linux.tar.gz` + 32-bit libs (`lib32gcc-s1`, `lib32stdc++6` on Debian/Ubuntu). No sudo needed for steamcmd itself.
 - Gotchas: first-run self-update is slow; keep `+quit` or the process hangs; retry on transient failures.
 

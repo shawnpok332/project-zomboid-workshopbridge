@@ -14,8 +14,11 @@ In this doc, "the Zomboid folder" means the game's save/cache directory: `~/Zomb
    - *Let the mod handle it:* on your first update, WorkshopBridge downloads Valve's official steamcmd into `Zomboid/workshop_cache/steamcmd/` automatically.
    - *Use your own:* create `Zomboid/workshopbridge.properties` in your Zomboid folder with one line:
      ```
-     steamcmd.path=C:\path\to\steamcmd.exe
+     steamcmd.path=C:/path/to/steamcmd.exe
      ```
+     (Forward slashes work on Windows too, and avoid Java properties'
+     backslash escaping, where a single `\t` would become a tab. If you must
+     use backslashes, double every one: `C:\\path\\to\\steamcmd.exe`.)
      The mod validates it by running `<exe> +quit`. A broken path fails fast
      with a message telling you to fix or remove it; when no path is
      configured, the mod uses its managed copy (bootstrapping it first if
@@ -31,7 +34,11 @@ In this doc, "the Zomboid folder" means the game's save/cache directory: `~/Zomb
 - **Update all (N)** downloads and installs every available update. Mods are replaced cleanly, stale files removed.
 - **Download** grabs a brand-new mod from the workshop: paste a workshop ID or URL (e.g. `2685600088` or the full `steamcommunity.com/sharedfiles/...?id=2685600088` link). It installs like an update and is tracked from then on.
 - Downloads run one at a time; a waiting download shows "Queued...".
-- Each mod row shows its state: tracked by WorkshopBridge, **Managed by Steam**, or **Unknown workshop ID**. Selecting a tracked mod shows a per-mod button: **Update** when a check found a newer version, **Force update** otherwise (it re-downloads regardless).
+- Selecting a mod shows its state in the info panel: tracked by WorkshopBridge
+  (with a per-mod button: **Update** when a check found a newer version,
+  **Force update** otherwise - it re-downloads regardless), **Managed by Steam**,
+  or **Unknown workshop ID**. After a check, mods with updates also get an
+  "Update available" badge right on their row.
 - Long operations show a progress panel with a throbber. If the network is down you'll get "Couldn't reach Steam's servers - check your internet connection" instead of a raw exception.
 
 ## How it works

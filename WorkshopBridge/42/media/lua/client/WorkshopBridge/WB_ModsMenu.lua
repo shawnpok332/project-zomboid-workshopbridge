@@ -254,9 +254,11 @@ end
 
 -- Fallback job pump: the poll normally runs on Events.OnTick, but if the
 -- tick doesn't fire while the Mods menu is open (main-menu context), the
--- screen's per-frame update() drives it instead. WB_PollJobs is idempotent
--- (terminal jobs are removed on first sighting), so double-pumping is
--- harmless.
+-- screen's per-frame update() drives it instead via WB_FallbackPump (which
+-- also advances the UI timers - WB_PollJobs itself must not, or the timers
+-- would run double speed when both pumps run). WB_PollJobs is idempotent
+-- (terminal jobs are removed on first sighting), so double-pumping the
+-- poll is safe; only the timer advancement is single-sourced.
 local function WB_WrapUpdatePump(ms)
     if ms.wbUpdatePumped then return end
     ms.wbUpdatePumped = true
@@ -264,7 +266,7 @@ local function WB_WrapUpdatePump(ms)
     if type(_update) ~= "function" then return end
     local pollErrorLogged = false
     ms.update = function(self, ...)
-        local ok, err = pcall(WB_PollJobs)
+        local ok, err = pcall(WB_FallbackPump)
         if not ok and not pollErrorLogged then
             pollErrorLogged = true
             print("[WorkshopBridge] poll error: " .. tostring(err))
@@ -328,6 +330,49 @@ local function WB_HookModInfoPanel()
 end
 
 -- ---------- install ----------
+
+-- Guidance label shown in place of the buttons when the Java backend is
+-- absent: same bottom-right cluster, so users see WHY nothing else is there.
+local function WB_AddGuidanceLabel(ms)
+    if not ms or ms.wbGuidanceAdded then return end
+    ms.wbGuidanceAdded = true
+    local anchor = ms.mapOrderbtn or ms.modOrderbtn or ms.acceptButton
+    if not anchor then return end
+    local w = 470
+    local x = anchor:getX() - 10 - w
+    local y = anchor:getY() + 2
+    local label = ISLabel:new(x, y, 20, WB_Text.NeedsZombieBuddy,
+        1, 0.55, 0.25, 1, UIFont.Small, true)
+    label:initialise()
+    label:instantiate()
+    WB_SetLabel(label, WB_Text.NeedsZombieBuddy)
+    label:setAnchorLeft(false)
+    label:setAnchorRight(true)
+    label:setAnchorTop(false)
+    label:setAnchorBottom(true)
+    ms:addChild(label)
+end
+
+-- Called from WB_Main when the Java API is absent: hook the menu just
+-- enough to explain why WorkshopBridge is inactive, instead of leaving
+-- the user with a silent empty menu.
+function WB_HookModsMenuNoApi()
+    if type(ModSelector) ~= "table" then
+        print("[WorkshopBridge] WARN: ModSelector not found, menu hooks skipped")
+        return
+    end
+    if not ModSelector.wbHooked then
+        ModSelector.wbHooked = true
+        local _create = ModSelector.create
+        ModSelector.create = function(self)
+            _create(self)
+            WB_AddGuidanceLabel(self)
+        end
+    end
+    if ModSelector.instance then
+        pcall(function() WB_AddGuidanceLabel(ModSelector.instance) end)
+    end
+end
 
 -- Called from WB_Main once the Java API (or debug stub) is confirmed present.
 function WB_HookModsMenu()

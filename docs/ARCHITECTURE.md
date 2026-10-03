@@ -79,6 +79,16 @@ Hardening (Oct 2026, from an external audit):
 - On API failure during a per-mod update, the previously recorded
   `timeUpdated` is kept instead of the wall clock, so the next check
   retries the comparison rather than wrongly calling it current.
+- A check re-reads the workshop map AFTER its API round trip and ignores
+  items with a download in flight, so a concurrent update can't resurrect
+  stale "update available" badges.
+- The shared progress panel has ownership: the first job to paint owns it
+  (no flicker between concurrent jobs); a completing job never hides a
+  still-running job's status, and a stuck error holds the panel against
+  concurrent jobs until the user dismisses it (a newer job's paints clear
+  it). UI timers (flash, throbber) advance only in
+  the Mods-screen fallback pump, never in `WB_PollJobs` itself, so they
+  can't run double speed when both pumps run.
 
 ## workshopbridge_map.json
 
@@ -130,7 +140,7 @@ Hardening (Oct 2026, from an external audit):
 2. Lua polls `wbGetJobStatus(jobId)` on tick with the progress panel; on completion the Mods list is reloaded so the new mod appears, and it is tracked from then on.
 
 ### First run / missing pieces
-- ZombieBuddy not installed → Lua detects `wbIsAvailable() == false` (globals missing) → Mods menu shows install guidance instead of Update buttons.
+- ZombieBuddy not installed → Lua detects `wbIsAvailable() == false` (globals missing) → the Mods menu still hooks, but shows an in-game "install ZombieBuddy" guidance label instead of the Update buttons (`WB_HookModsMenuNoApi`).
 - steamcmd not found → the Java side **bootstraps it automatically** from Valve's CDN into `Zomboid/workshop_cache/steamcmd/` (with progress). No system-wide discovery: either `steamcmd.path` in `Zomboid/workshopbridge.properties` (validated by execution, always wins) or the previously bootstrapped managed copy. `wbGetSteamCmdPath()` returns nil only when neither exists yet. If the binary can't execute from the game drive (noexec/sandboxed mount), it is bootstrapped again under `~/.cache/workshopbridge/steamcmd` (or `$XDG_CACHE_HOME`) and retried there.
 - Process launching: the mod defaults the JDK to `FORK` process spawning at load (the default `posix_spawn` fails with EACCES inside steam-run's sandbox); the user's explicit `-Djdk.lang.Process.launchMechanism` always wins.
 
