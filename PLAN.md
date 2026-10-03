@@ -110,6 +110,12 @@ planned properly.
   check found an update for that mod, "Force update" otherwise (clicking
   always re-downloads; per-mod update never checks first). The visible mod
   panel refreshes on check completion without reselecting.
+- [x] **Serialized downloads (Oct 2026).** Download-bearing jobs
+  (`submitUpdate`, `submitUpdateAll`) run on a dedicated single-thread
+  executor; checks stay on the cached pool. A waiting job reports
+  "Queued..." until it starts (surfaced in the per-mod label and progress
+  panel via the normal message path). Removes the concurrent-steamcmd
+  question and the shared-panel flicker entirely.
 
 - [ ] **Per-mod "Updating..." cleared on selection change (minor).**
   The stuck-forever case is fixed (the update() fallback pump delivers

@@ -60,6 +60,18 @@ public final class JobManager {
         t.setDaemon(true);
         return t;
     });
+    /**
+     * Downloads run one at a time: concurrent steamcmd processes share one
+     * install dir and gain nothing (each is network-bound with per-process
+     * overhead), while serialization keeps behavior deterministic and the
+     * UI trivial (one active download). The queue is implicit in the
+     * executor; a waiting job reports "Queued..." until it starts.
+     */
+    private final ExecutorService downloadExec = Executors.newSingleThreadExecutor(r -> {
+        Thread t = new Thread(r, "workshopbridge-download");
+        t.setDaemon(true);
+        return t;
+    });
     private final ConcurrentHashMap<String, Job> jobs = new ConcurrentHashMap<>();
 
     JobManager(Backend backend) {
@@ -71,11 +83,11 @@ public final class JobManager {
     }
 
     public String submitUpdateAll() {
-        return submit("update-all", this::runUpdateAll);
+        return submitDownload("update-all", this::runUpdateAll);
     }
 
     public String submitUpdate(String workshopId) {
-        return submit("update", job -> runUpdate(job, workshopId));
+        return submitDownload("update", job -> runUpdate(job, workshopId));
     }
 
     /** JSON status object, or null for unknown job ids. */
@@ -85,10 +97,21 @@ public final class JobManager {
     }
 
     private String submit(String kind, JobTask task) {
+        return submitOn(exec, kind, task, "");
+    }
+
+    /** Download-bearing jobs: serialized, "Queued..." until actually started. */
+    private String submitDownload(String kind, JobTask task) {
+        return submitOn(downloadExec, kind, task, "Queued...");
+    }
+
+    private String submitOn(ExecutorService target, String kind, JobTask task,
+            String initialMessage) {
         Job job = new Job(UUID.randomUUID().toString().substring(0, 8), kind);
+        job.message = initialMessage;
         jobs.put(job.id, job);
         prune();
-        exec.submit(() -> {
+        target.submit(() -> {
             try {
                 task.run(job);
             } catch (Throwable t) {
@@ -138,6 +161,7 @@ public final class JobManager {
     private void runUpdateAll(Job job) {
         Map<String, WorkshopMap.Entry> items = backend.workshopMap().snapshot();
         List<String> ids = new ArrayList<>(items.keySet());
+        job.message = "Checking for updates...";
         final Map<String, Long> remote;
         try {
             remote = WorkshopApi.getTimeUpdated(ids);

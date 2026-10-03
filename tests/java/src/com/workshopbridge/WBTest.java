@@ -208,6 +208,36 @@ public class WBTest {
         }
         api.stop(0);
 
+        // ---- 4d. downloads are serialized: second waits queued ----
+        // (no stub API needed: runUpdate falls back gracefully when the
+        // API is unreachable; the fake steamcmd does the real work)
+        // 99998 is slow in the fake steamcmd (sleeps 2s); 99999 is fast.
+        String slowId = jobs.submitUpdate("99998");
+        String fastId = jobs.submitUpdate("99999");
+        boolean sawQueued = false;
+        boolean overlap = false;
+        long qdeadline = System.currentTimeMillis() + 30_000;
+        while (System.currentTimeMillis() < qdeadline) {
+            Map<String, Object> sa =
+                    Json.object(Json.parse(jobs.statusJson(slowId)));
+            Map<String, Object> sb =
+                    Json.object(Json.parse(jobs.statusJson(fastId)));
+            String ma = String.valueOf(sa.get("message"));
+            String mb = String.valueOf(sb.get("message"));
+            if (mb.startsWith("Queued")) sawQueued = true;
+            if (ma.startsWith("Downloading") && mb.startsWith("Downloading")) {
+                overlap = true;
+            }
+            if ("done".equals(sa.get("state")) && "done".equals(sb.get("state"))) break;
+            Thread.sleep(50);
+        }
+        check(sawQueued, "second download reports Queued while first runs");
+        check(!overlap, "downloads never overlap");
+        Map<String, Object> sdone = awaitDone(jobs, slowId);
+        Map<String, Object> fdone = awaitDone(jobs, fastId);
+        check("done".equals(sdone.get("state")) && "done".equals(fdone.get("state")),
+                "both queued downloads complete");
+
         // ---- 4b. check-summary message building (no network needed) ----
         check(JobManager.checkSummary(2, List.of("222")).contains("2 mod(s) have updates")
                 && JobManager.checkSummary(2, List.of("222")).contains("222"),

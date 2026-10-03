@@ -15,6 +15,11 @@ if [ "$ID" = "0" ]; then
   echo "ERROR! Download item 0 failed (No match)" >&2
   exit 1
 fi
+if [ "$ID" = "99998" ]; then
+  # slow mode for the download-serialization test: hold the worker so a
+  # second queued download can be observed waiting
+  sleep 2
+fi
 mkdir -p "$MODDIR"
 printf 'id=FakeMod-%s\ntitle=Fake Mod\n' "$ID" > "$MODDIR/mod.info"
 mkdir -p "$MODDIR/../media/lua"
