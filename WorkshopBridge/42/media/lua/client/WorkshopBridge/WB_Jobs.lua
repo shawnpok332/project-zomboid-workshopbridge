@@ -7,6 +7,7 @@ require "WorkshopBridge/WB_Config"
 require "WorkshopBridge/WB_Json"
 
 local activeJobs = {}       -- jobId -> { onUpdate=fn, onDone=fn }
+local lastJobState = {}     -- jobId -> last seen state (for transition logging)
 local updateAvailable = {}  -- modId -> true (set by check jobs)
 local wbTick = 0
 local tickHooked = false
@@ -45,6 +46,7 @@ function WB_EnsurePolling()
     if not tickHooked then
         tickHooked = true
         Events.OnTick.Add(WB_PollJobs)
+        print("[WorkshopBridge] job polling started")
     end
 end
 
@@ -60,14 +62,21 @@ function WB_PollJobs()
             if dok then st = dec end
         end
         if type(st) == "table" then
+            if lastJobState[jobId] ~= st.state then
+                print("[WorkshopBridge] job " .. tostring(jobId) .. " state: "
+                    .. tostring(lastJobState[jobId]) .. " -> " .. tostring(st.state))
+                lastJobState[jobId] = st.state
+            end
             if cb.onUpdate then pcall(cb.onUpdate, st) end
             if st.state ~= "running" then
                 activeJobs[jobId] = nil
+                lastJobState[jobId] = nil
                 if cb.onDone then pcall(cb.onDone, st) end
             end
         else
             -- unknown job id or Java threw: drop it, report once
             activeJobs[jobId] = nil
+            lastJobState[jobId] = nil
             print("[WorkshopBridge] job " .. tostring(jobId) .. " failed: " .. tostring(st))
             if cb.onDone then pcall(cb.onDone, { state = "failed", error = tostring(st) }) end
         end
