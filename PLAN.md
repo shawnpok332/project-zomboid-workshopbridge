@@ -139,6 +139,14 @@ planned properly.
   list, Lua prompts (install-all vs pick), jobs install each dep like a
   normal download.
 
+- [ ] **Workshop Collections support (idea, unlikely).** Paste a collection
+  URL/ID, resolve the contained workshop items, download/install all of
+  them (reusing the serialized download queue). Investigate:
+  `GetPublishedFileDetails` returns a `children` array for collection
+  items. Note: authoring collections needs Steam game ownership, but
+  *consuming* them is just item IDs, so anonymous download works.
+  Only worth doing if the mod gets real users beyond us.
+
 - [ ] **"Open in Workshop" button.** Per-mod button opening the item's
   workshop page in the system browser. Lua can't launch browsers (Kahlua has
   no `os.execute`), so this is a Java-side `ProcessBuilder`
