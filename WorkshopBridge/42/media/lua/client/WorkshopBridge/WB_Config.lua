@@ -19,6 +19,7 @@ WB_Text = {
     UpdateAll        = "Update all",
     UpdateAllN       = "Update all (%d)",
     Update           = "Update",
+    ForceUpdate      = "Force update",
     Download         = "Download",
     Cancel           = "Cancel",
     DownloadModTitle = "Download mod from Workshop",

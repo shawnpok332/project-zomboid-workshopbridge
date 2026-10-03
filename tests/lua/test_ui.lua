@@ -183,12 +183,16 @@ check(#rowsDrawn == 1 and #badgesDrawn == 0, "no badge for up-to-date mod")
 -- ---------- per-mod update flow ----------
 panel:updateView(fakeModInfo("SomeMod", ""))
 check(panel.wbStatusLabel.name == WB_Text.UpdateAvailableBadge, "panel shows badge pre-update")
+check(panel.wbUpdateBtn.title == WB_Text.Update, "button says Update when update available",
+    panel.wbUpdateBtn.title)
 panel.wbUpdateBtn.onclick() -- click per-mod Update
 tick(30)
 tick(200) -- stub update job: 12 ticks/step x 8 steps
 check(panel.wbStatusLabel.name == WB_Text.UpToDate, "panel shows Up to date after update",
     panel.wbStatusLabel.name)
 check(not WB_IsUpdateAvailable("SomeMod"), "update-available cleared after update")
+check(panel.wbUpdateBtn.title == WB_Text.ForceUpdate, "button says Force update when up to date",
+    panel.wbUpdateBtn.title)
 
 -- ---------- update-all flow ----------
 ms.wbCheckBtn.onclick()
@@ -201,12 +205,19 @@ check(ms.wbUpdateAllBtn.title == "Update all", "update-all title reset")
 check((ms.reloaded or 0) >= 1, "reloadMods called after update-all")
 
 -- ---------- check flashes its result summary ----------
+panel:updateView(fakeModInfo("SomeMod", "")) -- select; no updates marked now
+check(panel.wbUpdateBtn.title == WB_Text.ForceUpdate, "button neutral before check")
 ms.wbCheckBtn.onclick()
 tick(80) -- stub check job completes (~72 ticks)
 local sumPanel = ms.wbProgressPanel
 check(sumPanel:isVisible(), "check result flashed")
 check(sumPanel.wbLabel.name == "Check complete", "flash shows check summary",
     sumPanel.wbLabel.name)
+-- visible panel refreshed without reselecting: badge + Update title
+check(panel.wbStatusLabel.name == WB_Text.UpdateAvailableBadge,
+    "panel badge refreshed by check")
+check(panel.wbUpdateBtn.title == WB_Text.Update,
+    "button title refreshed by check", panel.wbUpdateBtn.title)
 tick(200) -- flash timeout expires
 check(not sumPanel:isVisible(), "result flash auto-hides")
 

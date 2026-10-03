@@ -106,6 +106,10 @@ planned properly.
   candidates, plus a self-healing reverse lookup (`Backend.getWorkshopId`)
   that repairs stale folder-name entries on the spot by scanning mod.info.
   Existing bad entries fix themselves on next lookup; no map wipe needed.
+- [x] **Per-mod button title reflects state (Oct 2026).** "Update" when a
+  check found an update for that mod, "Force update" otherwise (clicking
+  always re-downloads; per-mod update never checks first). The visible mod
+  panel refreshes on check completion without reselecting.
 
 - [ ] **Per-mod "Updating..." label stuck / cleared on selection change (bug).**
   Clicking a mod's Update button shows "Updating...", but it does not clear

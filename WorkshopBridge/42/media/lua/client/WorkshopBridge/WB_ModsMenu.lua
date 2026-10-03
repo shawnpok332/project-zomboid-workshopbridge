@@ -47,6 +47,38 @@ local function WB_WorkshopIdFor(modId)
     return nil
 end
 
+-- ---------- per-mod panel state ----------
+-- (declared up here: the button handlers below close over these)
+
+local wbLastModPanel = nil -- { panel=..., modInfo=... } currently displayed
+
+-- Button title reflects what we know: "Update" when a check found something
+-- new, "Force update" otherwise (clicking always re-downloads regardless).
+local function WB_RefreshModButtonTitle(panel, modId)
+    if not panel.wbUpdateBtn then return end
+    WB_SetButtonTitle(panel.wbUpdateBtn,
+        WB_IsUpdateAvailable(modId) and WB_Text.Update or WB_Text.ForceUpdate)
+end
+
+local function WB_RefreshModPanel(panel, modInfo)
+    local modId = WB_GetModId(modInfo)
+    panel.wbModId = modId
+    if not panel.wbUpdateBtn then return end
+    local wsid = WB_WorkshopIdFor(modId)
+    if wsid then
+        panel.wbUpdateBtn:setVisible(true)
+        WB_SetLabel(panel.wbStatusLabel,
+            WB_IsUpdateAvailable(modId) and WB_Text.UpdateAvailableBadge or "")
+        WB_RefreshModButtonTitle(panel, modId)
+    elseif WB_GameWorkshopId(modInfo) then
+        panel.wbUpdateBtn:setVisible(false)
+        WB_SetLabel(panel.wbStatusLabel, WB_Text.ManagedBySteam)
+    else
+        panel.wbUpdateBtn:setVisible(false)
+        WB_SetLabel(panel.wbStatusLabel, WB_Text.UnknownWorkshopId)
+    end
+end
+
 -- ---------- button handlers ----------
 
 local function WB_OnCheckAll(ms)
@@ -72,6 +104,11 @@ local function WB_OnCheckAll(ms)
                 end
             end
             WB_RefreshUpdateAllButton(ms, n)
+            -- refresh the currently displayed mod panel so badges/titles
+            -- update without reselecting
+            if wbLastModPanel then
+                WB_RefreshModPanel(wbLastModPanel.panel, wbLastModPanel.modInfo)
+            end
             if st and st.state == "failed" then
                 print("[WorkshopBridge] check for updates failed: "
                     .. tostring(st.error or "?"))
@@ -145,6 +182,7 @@ local function WB_OnModUpdate(panel)
                 print("[WorkshopBridge] update of " .. tostring(modId) .. " complete")
                 WB_SetLabel(panel.wbStatusLabel, WB_Text.UpToDate)
                 WB_UnmarkUpdateAvailable(modId)
+                WB_RefreshModButtonTitle(panel, modId)
             end
         end,
     })
@@ -258,7 +296,7 @@ local function WB_AddModPanelControls(panel)
     local w, h = 130, 25
     local x = 10
     local y = math.max(40, panel:getHeight() - h - 10)
-    panel.wbUpdateBtn = ISButton:new(x, y, w, h, WB_Text.Update, panel,
+    panel.wbUpdateBtn = ISButton:new(x, y, w, h, WB_Text.ForceUpdate, panel,
         function() WB_OnModUpdate(panel) end)
     panel.wbUpdateBtn:initialise()
     panel.wbUpdateBtn:instantiate()
@@ -269,23 +307,8 @@ local function WB_AddModPanelControls(panel)
     panel:addChild(panel.wbStatusLabel)
 end
 
-local function WB_RefreshModPanel(panel, modInfo)
-    local modId = WB_GetModId(modInfo)
-    panel.wbModId = modId
-    if not panel.wbUpdateBtn then return end
-    local wsid = WB_WorkshopIdFor(modId)
-    if wsid then
-        panel.wbUpdateBtn:setVisible(true)
-        WB_SetLabel(panel.wbStatusLabel,
-            WB_IsUpdateAvailable(modId) and WB_Text.UpdateAvailableBadge or "")
-    elseif WB_GameWorkshopId(modInfo) then
-        panel.wbUpdateBtn:setVisible(false)
-        WB_SetLabel(panel.wbStatusLabel, WB_Text.ManagedBySteam)
-    else
-        panel.wbUpdateBtn:setVisible(false)
-        WB_SetLabel(panel.wbStatusLabel, WB_Text.UnknownWorkshopId)
-    end
-end
+-- (WB_RefreshModPanel lives in the helpers section above: the check/update
+-- button handlers close over it, so it must be declared before them.)
 
 local function WB_HookModInfoPanel()
     local MIP = WB_GetModInfoPanelClass()
@@ -299,6 +322,7 @@ local function WB_HookModInfoPanel()
     local _updateView = MIP.updateView
     MIP.updateView = function(self, modInfo)
         _updateView(self, modInfo)
+        wbLastModPanel = { panel = self, modInfo = modInfo }
         WB_RefreshModPanel(self, modInfo)
     end
 end
