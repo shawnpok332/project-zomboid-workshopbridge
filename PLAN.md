@@ -92,6 +92,11 @@ planned properly.
     `WB_PollJobs` (idempotent, double-pumping harmless). Next in-game run
     will show whether the tick fires (heartbeat lines) and the fallback
     should make jobs complete regardless.
+  - **Resolved Oct 2026**: with the update() fallback pump in place, the
+    poll delivers: `nil -> running -> done` transitions fire and completion
+    lines print in-game. Heartbeat kept but quieted (only with active
+    jobs). **Still to confirm: the panel actually renders visibly**
+    (logic runs; visual confirmation pending).
 
 - [ ] **Per-mod "Updating..." label stuck / cleared on selection change (bug).**
   Clicking a mod's Update button shows "Updating...", but it does not clear
