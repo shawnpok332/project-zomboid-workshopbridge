@@ -21,3 +21,6 @@ Thumbs.db
 # Game / local test artifacts (never commit your Zomboid folder or caches)
 Zomboid/
 workshop_cache/
+
+# Java test work dirs (tests/java/.test-work*/): local scratch, wiped each run
+tests/java/.test-work*/

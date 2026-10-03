@@ -10,6 +10,11 @@ for a in "$@"; do
   prev="$a"
 done
 MODDIR="$CACHE/steamapps/workshop/content/108600/$ID/mods/FakeMod/common"
+if [ "$ID" = "0" ]; then
+  # failure mode for tests: exit nonzero without producing any files
+  echo "ERROR! Download item 0 failed (No match)" >&2
+  exit 1
+fi
 mkdir -p "$MODDIR"
 printf 'id=FakeMod\ntitle=Fake Mod\n' > "$MODDIR/mod.info"
 mkdir -p "$MODDIR/../media/lua"

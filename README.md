@@ -16,7 +16,10 @@ In this doc, "the Zomboid folder" means the game's save/cache directory: `~/Zomb
      ```
      steamcmd.path=C:\path\to\steamcmd.exe
      ```
-     The mod validates it by running `<exe> +quit`. If that fails it falls back to the managed copy.
+     The mod validates it by running `<exe> +quit`. A broken path fails fast
+     with a message telling you to fix or remove it; when no path is
+     configured, the mod uses its managed copy (bootstrapping it first if
+     needed).
 4. Launch the game. If you run with `-Dzomboid.steam=0` (GOG), everything works. WorkshopBridge never touches Steamworks.
 
 ## Usage
@@ -30,11 +33,18 @@ In this doc, "the Zomboid folder" means the game's save/cache directory: `~/Zomb
 
 1. **Update** asks the Java side to run `steamcmd +login anonymous +workshop_download_item 108600 <id> +quit` on a background thread.
 2. The downloaded mod is copied flat into `Zomboid/mods/<modID>/`. The game's mod scan only looks one level deep, so nesting under a workshop-ID folder would hide the mod.
-3. The `workshopID -> [modID]` mapping is persisted in `Zomboid/workshop_cache/workshopbridge_map.json`. That's what powers update checks.
+3. The `workshopID -> [modID]` mapping is persisted in `Zomboid/workshopbridge_map.json`. That's what powers update checks.
 4. Update checks compare the workshop item's `time_updated` (via the Steam Web API) against the locally installed version.
+
+## Building
+
+The Lua side needs no build. The Java backend compiles with Gradle against your
+Project Zomboid install's classes plus `ZombieBuddy.jar`; one-time setup and the
+`gradle installJar` step are in [WorkshopBridge/java-src/README.md](WorkshopBridge/java-src/README.md).
 
 ## Docs
 
+- [TESTING.md](TESTING.md) - how to run the offline suites and the online smoke test
 - [PLAN.md](PLAN.md) - phased build plan and open questions
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) - Lua/Java contract, data flows, map format
 - [docs/RESEARCH.md](docs/RESEARCH.md) - validation research (why Lua-only can't work, ZombieBuddy, steamcmd)
