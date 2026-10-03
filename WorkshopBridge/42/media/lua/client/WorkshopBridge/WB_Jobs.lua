@@ -10,9 +10,21 @@
 require "WorkshopBridge/WB_Config"
 require "WorkshopBridge/WB_Json"
 
+-- workshop id from OUR map via the Java API; nil = "Unknown workshop ID"
+-- (used by both the menu and the update-available state below)
+function WB_WorkshopIdFor(modId)
+    if type(wbGetWorkshopId) ~= "function" or not modId then return nil end
+    local ok, wsid = pcall(wbGetWorkshopId, modId)
+    if ok and wsid and wsid ~= "" then return wsid end
+    return nil
+end
+
 local activeJobs = {}       -- jobId -> { onUpdate=fn, onDone=fn }
 local lastJobState = {}     -- jobId -> last seen state (for transition logging)
-local updateAvailable = {}  -- modId -> true (set by check jobs)
+-- workshopId -> true, set by check jobs. Keyed by workshop id, not mod id:
+-- the workshop item is the update unit (one item can hold several mods),
+-- so updating via any one of its mods clears the flag for all of them.
+local updateAvailable = {}
 local wbTick = 0            -- advanced ONLY by the Mods-screen fallback pump
 local tickHooked = false
 local currentJob = nil      -- jobId whose poll callback is currently running
@@ -26,20 +38,24 @@ function WB_TrackJob(jobId, callbacks)
     WB_EnsurePolling()
 end
 
-function WB_MarkUpdateAvailable(modId)
-    updateAvailable[modId] = true
+function WB_MarkUpdateAvailable(workshopId)
+    updateAvailable[workshopId] = true
 end
 
-function WB_UnmarkUpdateAvailable(modId)
-    updateAvailable[modId] = nil
+function WB_UnmarkUpdateAvailable(workshopId)
+    updateAvailable[workshopId] = nil
 end
 
 function WB_ClearUpdateAvailable()
     for k in pairs(updateAvailable) do updateAvailable[k] = nil end
 end
 
+-- modId here is the caller's handle; the lookup resolves it to the
+-- workshop id via the map, so every mod of a multi-mod item shares one flag
 function WB_IsUpdateAvailable(modId)
-    return updateAvailable[modId] == true
+    if not modId then return false end
+    local wsid = WB_WorkshopIdFor(modId)
+    return wsid ~= nil and updateAvailable[wsid] == true
 end
 
 function WB_CountUpdateAvailable()

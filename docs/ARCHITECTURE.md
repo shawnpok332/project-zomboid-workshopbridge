@@ -39,10 +39,10 @@ Exposed as **plain Lua globals** (`wbIsAvailable()` etc.) via
 | `wbIsAvailable()` | - | `true` when the Java side loaded (Lua uses this to detect ZombieBuddy presence) |
 | `wbGetSteamCmdPath()` | - | path string, or `nil` if not detected |
 | `wbGetWorkshopId(modId)` | PZ mod id (`mod.info` `id=`) | workshop ID string, or `nil` = "Unknown workshop ID" |
-| `wbCheckForUpdates()` | - | starts a job; returns jobId. A done status carries `updates` = list of **modIds** with updates available |
+| `wbCheckForUpdates()` | - | starts a job; returns jobId. A done status carries `updates` = list of **workshopIds** with updates available (one entry per outdated item, however many mods it holds) |
 | `wbUpdateMod(workshopId)` | workshop ID | jobId |
 | `wbUpdateAll()` | - | jobId (checks, then downloads only outdated items) |
-| `wbGetJobStatus(jobId)` | jobId | **JSON string** `{"state","done","total","message"[,"error"][,"updates"]}`, or null for unknown jobs. Lua decodes it with the pure-Lua `WB_Json.lua` (Kahlua's Java return marshaling is deliberately not relied upon). A done check-job carries `updates` = list of **modIds** with updates available |
+| `wbGetJobStatus(jobId)` | jobId | **JSON string** `{"state","done","total","message"[,"error"][,"updates"]}`, or null for unknown jobs. Lua decodes it with the pure-Lua `WB_Json.lua` (Kahlua's Java return marshaling is deliberately not relied upon). A done check-job carries `updates` = list of **workshopIds** with updates available (one entry per outdated item, however many mods it holds) |
 
 ### Job status shape (JSON string, decoded in Lua by WB_Json)
 
@@ -123,11 +123,11 @@ Hardening (Oct 2026, from an external audit):
 ### Check for updates
 1. Lua: **Check for updates** button → `wbCheckForUpdates()` → jobId.
 2. Java: for each mapped workshop item, `GetPublishedFileDetails` → compare `time_updated` vs stored `timeUpdated`. No downloads.
-3. Lua polls with the progress panel; on completion, rows with available updates show an "Update available" badge, **Update all** becomes "Update all (n)", the selected mod's panel refreshes in place, and the result summary ("Everything is up to date" / "N mod(s) have updates") flashes briefly. Failures stick in the panel until clicked.
+3. Lua polls with the progress panel; on completion, rows whose workshop item has an update show an "Update available" badge, **Update all** becomes "Update all (n)" (n counts workshop items, not mods), the selected mod's panel refreshes in place, and the result summary ("Everything is up to date" / "N updates available") flashes briefly. Failures stick in the panel until clicked.
 
 ### Single mod update
 1. Lua: per-mod button → `wbGetWorkshopId(modId)` → `wbUpdateMod(workshopId)` → jobId. The button reads **Update** when a check flagged the mod, **Force update** otherwise (it always re-downloads; it never checks first).
-2. Lua polls with the progress panel; the row label tracks the job ("Updating...", "Queued...", "Up to date" / failure).
+2. Lua polls with the progress panel; the row label tracks the job ("Updating...", "Queued...", "Up to date" / failure). On success the update-available flag clears for the whole workshop item, so sibling mods from the same item lose their badges and the **Update all** count drops too.
 3. Java (serialized with other downloads): download → move into `Zomboid/mods/` (replace existing) → update map → job `done`.
 
 ### Update all

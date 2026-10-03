@@ -171,7 +171,8 @@ check(prog.wbLabel.name:find("Checking") ~= nil, "progress shows check message",
     prog.wbLabel.name)
 tick(200) -- stub check job: 12 ticks/step x 6 steps
 check(WB_IsUpdateAvailable("SomeMod"), "update marked available after check")
-check(ms.wbUpdateAllBtn.title == "Update all (2)", "update-all button shows count",
+-- one workshop item, two mods: the count is items, not mods
+check(ms.wbUpdateAllBtn.title == "Update all (1)", "update-all button shows item count",
     ms.wbUpdateAllBtn.title)
 
 -- row badge
@@ -195,8 +196,12 @@ tick(200) -- stub update job: 12 ticks/step x 8 steps
 check(panel.wbStatusLabel.name == WB_Text.UpToDate, "panel shows Up to date after update",
     panel.wbStatusLabel.name)
 check(not WB_IsUpdateAvailable("SomeMod"), "update-available cleared after update")
+check(not WB_IsUpdateAvailable("NoMapMod"),
+    "sibling mod from the same workshop item cleared too")
 check(panel.wbUpdateBtn.title == WB_Text.ForceUpdate, "button says Force update when up to date",
     panel.wbUpdateBtn.title)
+check(ms.wbUpdateAllBtn.title == "Update all", "update-all count reset after per-mod update",
+    ms.wbUpdateAllBtn.title)
 
 -- ---------- update-all flow ----------
 ms.wbCheckBtn.onclick()

@@ -4,7 +4,21 @@
 -- This file has NO side effects on load; WB_Main calls WB_InstallDebugStub()
 -- only when the real Java API is absent and WB_Config.DEBUG_STUB is true.
 
-local STUB_WORKSHOP_ID = "1234567890"
+-- Canned workshop mapping. SomeMod and NoMapMod share one item (the
+-- multi-mod case: one workshop id, several mods); OtherMod is a separate
+-- up-to-date item; anything else lands on a third up-to-date item.
+local STUB_WSIDS = {
+    SomeMod = "1111111111",
+    NoMapMod = "1111111111",
+    OtherMod = "2222222222",
+}
+local STUB_DEFAULT_WSID = "3333333333"
+-- the only item the stub ever reports as outdated
+local STUB_OUTDATED = { ["1111111111"] = true }
+
+local function stubWsidFor(modId)
+    return STUB_WSIDS[modId] or STUB_DEFAULT_WSID
+end
 
 -- modIds the stub has seen via wbGetWorkshopId (used to fake a check result)
 local seenModIds = {}
@@ -57,7 +71,7 @@ function WB_InstallDebugStub()
         -- Every mod looks "known" except our own, so both UI states are visible.
         if not modId or modId == WB_Config.MOD_ID then return nil end
         seenModIds[modId] = true
-        return STUB_WORKSHOP_ID
+        return stubWsidFor(modId)
     end
 
     function wbCheckForUpdates()
@@ -87,10 +101,16 @@ function WB_InstallDebugStub()
         if j.step < j.total then return running() end
         stubJobs[jobId] = nil
         if j.kind == "check" then
-            -- report every seen mod as having an update (sorted, so the
-            -- stub is deterministic run to run - pairs() order is not)
+            -- report each outdated workshop item once, however many of its
+            -- mods were seen (sorted, so the stub is deterministic run to
+            -- run - pairs() order is not)
+            local items = {}
+            for id in pairs(seenModIds) do
+                local wsid = stubWsidFor(id)
+                if STUB_OUTDATED[wsid] then items[wsid] = true end
+            end
             local all = {}
-            for id in pairs(seenModIds) do all[#all + 1] = id end
+            for wsid in pairs(items) do all[#all + 1] = wsid end
             table.sort(all)
             return statusJson("done", j.total, j.total, "Check complete", all)
         end

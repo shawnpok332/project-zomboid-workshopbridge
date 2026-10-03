@@ -28,7 +28,9 @@ public final class JobManager {
         volatile int total;
         volatile String message = "";
         volatile String error;
-        /** modIds with updates available (check jobs). */
+        /** workshopIds with updates available (check jobs): the workshop
+         *  item is the update unit, not the individual mod (one item can
+         *  hold several mods). */
         volatile List<String> updates = Collections.emptyList();
 
         Job(String id, String kind) {
@@ -172,7 +174,9 @@ public final class JobManager {
                 missing.add(wsid);
                 job.message = "Checked " + i + "/" + ids.size();
             } else if (!inFlight.contains(wsid) && tu > e.timeUpdated) {
-                withUpdates.addAll(e.modIds);
+                // one entry per workshop item: an item holding five mods is
+                // one update, not five
+                withUpdates.add(wsid);
                 job.message = "Update available: " + wsid;
             } else {
                 job.message = "Checked " + i + "/" + ids.size();
@@ -285,7 +289,9 @@ public final class JobManager {
     static String checkSummary(int updateCount, List<String> missing) {
         String base = updateCount == 0
                 ? "Everything is up to date"
-                : updateCount + " mod(s) have updates";
+                : updateCount == 1
+                        ? "1 update available"
+                        : updateCount + " updates available";
         return base + missingSuffix(missing);
     }
 

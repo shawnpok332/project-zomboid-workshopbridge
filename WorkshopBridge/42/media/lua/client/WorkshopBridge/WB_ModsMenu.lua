@@ -39,18 +39,14 @@ local function WB_GameWorkshopId(modInfo)
     return nil
 end
 
--- workshop id from OUR map via the Java API; nil = "Unknown workshop ID"
-local function WB_WorkshopIdFor(modId)
-    if type(wbGetWorkshopId) ~= "function" or not modId then return nil end
-    local ok, wsid = pcall(wbGetWorkshopId, modId)
-    if ok and wsid and wsid ~= "" then return wsid end
-    return nil
-end
+-- (WB_WorkshopIdFor lives in WB_Jobs.lua now: the update-available state
+-- there resolves mod ids through it too.)
 
 -- ---------- per-mod panel state ----------
 -- (declared up here: the button handlers below close over these)
 
 local wbLastModPanel = nil -- { panel=..., modInfo=... } currently displayed
+local wbScreen = nil -- the hooked ModSelector, for button-count refreshes
 
 -- Button title reflects what we know: "Update" when a check found something
 -- new, "Force update" otherwise (clicking always re-downloads regardless).
@@ -98,8 +94,10 @@ local function WB_OnCheckAll(ms)
             WB_ClearUpdateAvailable()
             local n = 0
             if st and st.state ~= "failed" and st.updates then
-                for _, modId in ipairs(st.updates) do
-                    WB_MarkUpdateAvailable(modId)
+                -- st.updates lists workshop ids (one entry per outdated
+                -- item, however many mods the item holds)
+                for _, wsid in ipairs(st.updates) do
+                    WB_MarkUpdateAvailable(wsid)
                     n = n + 1
                 end
             end
@@ -181,8 +179,13 @@ local function WB_OnModUpdate(panel)
             else
                 print("[WorkshopBridge] update of " .. tostring(modId) .. " complete")
                 WB_SetLabel(panel.wbStatusLabel, WB_Text.UpToDate)
-                WB_UnmarkUpdateAvailable(modId)
+                -- clear by workshop id: the download updated the whole
+                -- item, so sibling mods from the same item stop showing
+                -- "update available" too
+                WB_UnmarkUpdateAvailable(wsid)
                 WB_RefreshModButtonTitle(panel, modId)
+                -- the Update-all count dropped by one as well
+                WB_RefreshUpdateAllButton(wbScreen, WB_CountUpdateAvailable())
             end
         end,
     })
@@ -278,6 +281,7 @@ end
 -- idempotent per-instance hook (safe to re-call, e.g. after reloadMods)
 function WB_HookInstance(ms)
     if not ms then return end
+    wbScreen = ms
     WB_AddMenuButtons(ms)
     WB_WrapRowDrawing(ms)
     WB_WrapUpdatePump(ms)

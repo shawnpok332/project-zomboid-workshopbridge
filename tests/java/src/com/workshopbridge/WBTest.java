@@ -208,8 +208,8 @@ public class WBTest {
             Map<String, Object> st = awaitDone(jobs, checkId);
             check("done".equals(st.get("state")), "check completes", st.get("state"));
             List<Object> updates = Json.array(st.get("updates"));
-            check(updates != null && updates.size() == 1 && "ModA".equals(updates.get(0)),
-                    "check finds ModA update", updates);
+            check(updates != null && updates.size() == 1 && "111".equals(updates.get(0)),
+                    "check reports the outdated workshop item (not its mod)", updates);
             String msg = String.valueOf(st.get("message"));
             check(msg.contains("222") && msg.contains("no longer listed"),
                     "check flags deleted item", msg);
@@ -341,9 +341,13 @@ public class WBTest {
         check(failMarker.delete(), "fail marker cleaned up");
 
         // ---- 4b. check-summary message building (no network needed) ----
-        check(JobManager.checkSummary(2, List.of("222")).contains("2 mod(s) have updates")
-                && JobManager.checkSummary(2, List.of("222")).contains("222"),
-                "summary with updates + missing");
+        check(JobManager.checkSummary(2, List.of("222")).equals("2 updates available; "
+                        + "1 workshop item(s) no longer listed (deleted or private?): 222"),
+                "summary with updates + missing",
+                JobManager.checkSummary(2, List.of("222")));
+        check(JobManager.checkSummary(1, List.of()).equals("1 update available"),
+                "summary singular",
+                JobManager.checkSummary(1, List.of()));
         check(JobManager.checkSummary(0, List.of()).equals("Everything is up to date"),
                 "summary clean");
         String s2 = JobManager.checkSummary(0, List.of("222", "333"));
