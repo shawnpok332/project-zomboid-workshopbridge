@@ -32,7 +32,9 @@ Runs, in order:
 
 ### Java: `./tests/java/run.sh`
 
-Needs: JDK 17+ on PATH (`javac`, `java`).
+Needs: JDK 17+ on PATH (`javac`, `java`), plus a Unix shell: `run.sh` is bash
+and the fake steamcmd is a shell script, so on native Windows run the suite
+under WSL2 instead.
 
 Compiles the real backend against test stubs (no game classes, no ZombieBuddy
 needed) and runs `WBTest`. The Steam Web API is a local stub HTTP server and

@@ -168,6 +168,18 @@ public class WBTest {
         String fakeExe = new File(System.getProperty("wb.test.fakebin"),
                 "steamcmd.sh").getAbsolutePath();
         Files.writeString(props.toPath(), "steamcmd.path=" + fakeExe + "\n");
+        // BOM variant: Windows Notepad saves UTF-8 with a BOM; the override
+        // must still be honored, not silently dropped
+        byte[] bom = {(byte) 0xEF, (byte) 0xBB, (byte) 0xBF};
+        byte[] plain = ("steamcmd.path=" + fakeExe + "\n").getBytes(StandardCharsets.UTF_8);
+        byte[] withBom = new byte[bom.length + plain.length];
+        System.arraycopy(bom, 0, withBom, 0, bom.length);
+        System.arraycopy(plain, 0, withBom, bom.length, plain.length);
+        Files.write(props.toPath(), withBom);
+        check(fakeExe.equals(backend.steamCmd().findExecutable()),
+                "BOM in properties file does not drop steamcmd.path",
+                backend.steamCmd().findExecutable());
+        Files.writeString(props.toPath(), "steamcmd.path=" + fakeExe + "\n");
 
         // ---- 4. check job with a stub Steam API: 111 updated, 222 gone ----
         HttpServer api = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
@@ -203,7 +215,7 @@ public class WBTest {
         boolean liveHttp = stubApiUsable(System.getProperty("workshopbridge.steamApiUrl"));
         if (!liveHttp) {
             System.out.println("SKIPPED live check-job HTTP test (no usable loopback HTTP here)");
-            System.out.println("SKIPPED check finds ModA update (no usable loopback HTTP here)");
+            System.out.println("SKIPPED check reports the outdated workshop item (no usable loopback HTTP here)");
             System.out.println("SKIPPED check flags deleted item (no usable loopback HTTP here)");
             System.out.println("SKIPPED live update-all HTTP test (no usable loopback HTTP here)");
         } else {
@@ -491,6 +503,15 @@ public class WBTest {
         check(SteamCmd.missing32BitHint(
                 "did not identify as steamcmd (exit=127)", true).contains("steam-run"),
                 "NixOS exit=127 hint names steam-run");
+        // Windows branch (direct: isWindows() sniffs the real OS)
+        check(SteamCmd.windowsFailureHint("createprocess error=193, %1 is not a valid"
+                        + " win32 application").contains("Defender"),
+                "Windows corrupt-download hint");
+        check(SteamCmd.windowsFailureHint("cannot launch: createprocess error=5,"
+                        + " access is denied").contains("Unblock"),
+                "Windows blocked-exe hint");
+        check(SteamCmd.windowsFailureHint("did not identify as steamcmd (exit=1)").isEmpty(),
+                "Windows hint empty for unrelated failures");
         check(SteamCmd.missing32BitHint(
                 "did not identify as steamcmd (exit=1, output: nope)").isEmpty(),
                 "no 32-bit hint for other failures");
@@ -524,12 +545,28 @@ public class WBTest {
                         + " error=2, No such file or directory",
                 false).isEmpty(),
                 "no error=2 hint off NixOS");
-        File fbXdg = SteamCmd.fallbackSteamCmdDir("/tmp/xdgcache", "/home/u");
+        check(SteamCmd.isExecDenied(
+                "Cannot run program \"C:\\wb\\steamcmd.exe\": CreateProcess error=5, Access is denied"),
+                "Windows error=5 detected as exec-denied");
+        check(SteamCmd.isExecDenied(
+                "Cannot run program \"C:\\wb\\steamcmd.exe\": CreateProcess error=193,"
+                        + " %1 is not a valid Win32 application"),
+                "Windows error=193 detected as exec-denied");
+        File fbXdg = SteamCmd.fallbackSteamCmdDir(false, null, "/tmp/xdgcache", "/home/u");
         check(fbXdg.getAbsolutePath().equals("/tmp/xdgcache/workshopbridge/steamcmd"),
                 "fallback honors XDG_CACHE_HOME", fbXdg);
-        File fbHome = SteamCmd.fallbackSteamCmdDir("", "/home/u");
+        File fbHome = SteamCmd.fallbackSteamCmdDir(false, null, "", "/home/u");
         check(fbHome.getAbsolutePath().equals("/home/u/.cache/workshopbridge/steamcmd"),
                 "fallback defaults to ~/.cache", fbHome);
+        File fbWin = SteamCmd.fallbackSteamCmdDir(true, "C:\\Users\\u\\AppData\\Local",
+                null, "C:\\Users\\u");
+        check(fbWin.getPath().equals("C:\\Users\\u\\AppData\\Local" + File.separator
+                        + "workshopbridge" + File.separator + "steamcmd"),
+                "fallback prefers %LOCALAPPDATA% on Windows", fbWin);
+        File fbWinNoEnv = SteamCmd.fallbackSteamCmdDir(true, "", null, "C:\\Users\\u");
+        check(fbWinNoEnv.getPath().equals("C:\\Users\\u" + File.separator + ".cache"
+                        + File.separator + "workshopbridge" + File.separator + "steamcmd"),
+                "Windows fallback without LOCALAPPDATA", fbWinNoEnv);
 
         // ---- 15. posix_spawn hint, ANSI stripping, validation leniency ----
         check(SteamCmd.posixSpawnHint(

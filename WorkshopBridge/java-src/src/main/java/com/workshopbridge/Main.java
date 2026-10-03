@@ -1,5 +1,7 @@
 package com.workshopbridge;
 
+import java.util.Locale;
+
 /**
  * Optional entry point: ZombieBuddy calls {@code Main.main(String[])} when the
  * mod loads. Kept deliberately light - the backend initializes lazily on the
@@ -32,6 +34,11 @@ public class Main {
      * is a harmless no-op. Package-private so tests can call it.
      */
     static void ensureForkLaunchMechanism() {
+        // jdk.lang.Process.launchMechanism is only read by the Unix ProcessImpl;
+        // on Windows it is a no-op, so don't set it (or log about it) there.
+        if (System.getProperty("os.name", "").toLowerCase(Locale.ROOT).contains("win")) {
+            return;
+        }
         if (System.getProperty(LAUNCH_MECHANISM_PROP) == null) {
             System.setProperty(LAUNCH_MECHANISM_PROP, "FORK");
             System.out.println("[WorkshopBridge] process launch mechanism set to FORK"

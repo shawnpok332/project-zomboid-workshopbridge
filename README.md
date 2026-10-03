@@ -65,8 +65,29 @@ Project Zomboid install's classes plus `ZombieBuddy.jar`; one-time setup and the
 - **steamcmd can't execute from the game drive** (e.g. a `noexec` removable-media
   mount, or a sandboxed bind mount): the mod automatically bootstraps the
   steamcmd *binary* into `~/.cache/workshopbridge/steamcmd` (or
-  `$XDG_CACHE_HOME`) and retries there. Workshop downloads still land in
-  `Zomboid/workshop_cache` on the game drive.
+  `$XDG_CACHE_HOME`; on Windows `%LOCALAPPDATA%\workshopbridge\steamcmd`) and
+  retries there. Workshop downloads still land in `Zomboid/workshop_cache` on
+  the game drive.
+
+### Windows
+
+- **Your Zomboid folder** is at `%USERPROFILE%\Zomboid` (press Win+R, paste
+  `%USERPROFILE%`, open the `Zomboid` folder). Mods go in `Zomboid\mods`,
+  `workshopbridge.properties` (if you use one) goes directly in `Zomboid`.
+- **Windows Defender / SmartScreen vs. steamcmd.exe:** a freshly downloaded
+  `steamcmd.exe` can get quarantined or blocked. If downloads fail right after
+  the automatic bootstrap, check Defender's protection history and
+  restore/allow-list the file, or allow-list the `Zomboid\workshop_cache\steamcmd`
+  folder. Also: a downloaded exe can carry the "blocked" mark - right-click
+  `steamcmd.exe` -> Properties -> check **Unblock** -> OK, then retry.
+- **Editing `workshopbridge.properties` in Notepad:** save it via File -> Save As
+  with "Save as type" set to **All files** (otherwise you get
+  `workshopbridge.properties.txt`, which the mod ignores). Plain UTF-8 is fine;
+  if Notepad saved it with a BOM the mod strips it.
+- **Very long mod paths:** if an install fails and the mod lives in a deeply
+  nested folder, Windows' 260-character path limit may be the cause. The error
+  message says so when it looks likely; the fix is enabling long paths in
+  `HKLM\SYSTEM\CurrentControlSet\Control\FileSystem\LongPathsEnabled`.
 
 ## Docs
 

@@ -10,10 +10,12 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
+import java.io.StringReader;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -172,17 +174,25 @@ public final class SteamCmd {
     /**
      * Fallback dir for the steamcmd binary when the primary dir is on a
      * filesystem that refuses to execute files. Package-private for tests.
+     * On Windows the idiomatic base is %LOCALAPPDATA%; elsewhere
+     * XDG_CACHE_HOME or ~/.cache.
      */
-    static File fallbackSteamCmdDir(String xdgCacheHome, String userHome) {
-        File base = (xdgCacheHome != null && !xdgCacheHome.isBlank())
-                ? new File(xdgCacheHome)
-                : new File(userHome, ".cache");
+    static File fallbackSteamCmdDir(boolean win, String localAppData,
+            String xdgCacheHome, String userHome) {
+        File base;
+        if (win && localAppData != null && !localAppData.isBlank()) {
+            base = new File(localAppData);
+        } else if (xdgCacheHome != null && !xdgCacheHome.isBlank()) {
+            base = new File(xdgCacheHome);
+        } else {
+            base = new File(userHome, ".cache");
+        }
         return new File(base, "workshopbridge" + File.separator + "steamcmd");
     }
 
     private static File fallbackSteamCmdDir() {
-        return fallbackSteamCmdDir(System.getenv("XDG_CACHE_HOME"),
-                System.getProperty("user.home"));
+        return fallbackSteamCmdDir(isWindows(), System.getenv("LOCALAPPDATA"),
+                System.getenv("XDG_CACHE_HOME"), System.getProperty("user.home"));
     }
 
     /** Candidate steamcmd binary dirs in preference order. */
@@ -260,7 +270,7 @@ public final class SteamCmd {
         StringBuilder output = new StringBuilder();
         Thread drainer = new Thread(() -> {
             try (BufferedReader br = new BufferedReader(
-                    new InputStreamReader(p.getInputStream(), StandardCharsets.UTF_8))) {
+                    new InputStreamReader(p.getInputStream(), processOutputCharset()))) {
                 String line;
                 while ((line = br.readLine()) != null) {
                     final String clean = stripAnsi(line);
@@ -334,6 +344,16 @@ public final class SteamCmd {
         return System.getProperty("os.name", "").toLowerCase(Locale.ROOT).contains("win");
     }
 
+    /**
+     * Charset for decoding a child process's stdout. steamcmd.exe writes in
+     * the Windows console code page (often 437/850/1252), not UTF-8, so
+     * decode with the platform default there; everywhere else UTF-8 is the
+     * sane assumption.
+     */
+    private static Charset processOutputCharset() {
+        return isWindows() ? Charset.defaultCharset() : StandardCharsets.UTF_8;
+    }
+
     private static boolean isMac() {
         String os = System.getProperty("os.name", "").toLowerCase(Locale.ROOT);
         return os.contains("mac") || os.contains("darwin");
@@ -394,7 +414,10 @@ public final class SteamCmd {
 
     // package-private for tests
     static String missing32BitHint(String reason, boolean nixos) {
-        String low = reason.toLowerCase(Locale.ROOT);
+        String low = reason == null ? "" : reason.toLowerCase(Locale.ROOT);
+        if (isWindows()) {
+            return windowsFailureHint(low);
+        }
         if (nixos && low.contains("error=2") && low.contains("no such file")) {
             // The script itself is present and executable, but the kernel
             // cannot find its interpreter (/bin/bash) - the classic NixOS
@@ -413,6 +436,31 @@ public final class SteamCmd {
                     + " Debian/Ubuntu: sudo apt install lib32gcc-s1 lib32stdc++6 |"
                     + " Arch: sudo pacman -S lib32-gcc-libs |"
                     + " Fedora: sudo dnf install glibc.i686 libstdc++.i686 -- then retry.";
+        }
+        return "";
+    }
+
+    /**
+     * Windows failure advice for a broken steamcmd. The Linux package advice
+     * in {@link #missing32BitHint} is nonsense on Windows; the realistic
+     * failure modes there are a quarantined/blocked exe or a corrupt
+     * download. Package-private for tests ({@code isWindows()} sniffs the
+     * real OS, so this branch is not reachable on Linux otherwise).
+     */
+    static String windowsFailureHint(String low) {
+        if (low.contains("error=193") || low.contains("not a valid win32")) {
+            return " The steamcmd download looks corrupt (not a valid Windows"
+                    + " executable): delete the steamcmd folder so it re-downloads"
+                    + " on the next run. If Windows Defender / SmartScreen"
+                    + " quarantined steamcmd.exe, restore or allow-list it first.";
+        }
+        if (low.contains("error=5") || low.contains("access is denied")
+                || low.contains("cannot launch") || low.contains("exit=127")) {
+            return " If Windows Defender / SmartScreen blocked or quarantined"
+                    + " steamcmd.exe, restore it or allow-list its folder and"
+                    + " retry. A downloaded exe can also carry the 'blocked' mark:"
+                    + " right-click steamcmd.exe -> Properties -> check 'Unblock'"
+                    + " -> OK, then retry.";
         }
         return "";
     }
@@ -486,7 +534,7 @@ public final class SteamCmd {
         StringBuilder output = new StringBuilder();
         Thread drainer = new Thread(() -> {
             try (BufferedReader br = new BufferedReader(
-                    new InputStreamReader(p.getInputStream(), StandardCharsets.UTF_8))) {
+                    new InputStreamReader(p.getInputStream(), processOutputCharset()))) {
                 String line;
                 while ((line = br.readLine()) != null) {
                     synchronized (output) {
@@ -597,7 +645,13 @@ public final class SteamCmd {
         String low = message.toLowerCase(Locale.ROOT);
         return low.contains("permission denied")
                 || low.contains("error=13")
-                || low.contains("error: 13");
+                || low.contains("error: 13")
+                // Windows: CreateProcess ERROR_ACCESS_DENIED / ERROR_BAD_EXE_FORMAT.
+                // 193 usually means a corrupt download rather than permissions,
+                // but the bootstrap retry re-downloads into the fallback dir,
+                // which is the right recovery there too.
+                || low.contains("error=5")
+                || low.contains("error=193");
     }
 
     private String bootstrapIn(File dir, boolean win, Consumer<String> log) throws IOException {
@@ -869,9 +923,18 @@ public final class SteamCmd {
         if (!props.isFile()) {
             return null;
         }
-        try (FileInputStream in = new FileInputStream(props)) {
+        try {
+            // Read as UTF-8 text and strip a leading BOM: Windows Notepad
+            // saves UTF-8 with a BOM by default, which would otherwise become
+            // part of the first key ("\uFEFFsteamcmd.path") and silently drop
+            // a hand-written override. (Using the Reader overload also keeps
+            // non-ASCII paths intact, which load(InputStream) would mangle.)
+            String text = Files.readString(props.toPath(), StandardCharsets.UTF_8);
+            if (text.startsWith("\uFEFF")) {
+                text = text.substring(1);
+            }
             Properties p = new Properties();
-            p.load(in);
+            p.load(new StringReader(text));
             String v = p.getProperty("steamcmd.path");
             return v == null || v.isBlank() ? null : v.trim();
         } catch (IOException e) {
