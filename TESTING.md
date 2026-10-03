@@ -15,8 +15,12 @@ Runs, in order:
    arrays, nesting, escapes, unicode, numbers, malformed input.
 2. **UI integration** (`test_ui.lua`) - loads the real `WB_*.lua` files with stubbed
    PZ globals and walks the whole flow: boot, menu hook, three-state per-mod panel
-   (Update / Managed by Steam / Unknown workshop ID), check-for-updates, update
-   badges on rows, per-mod update, update-all, unknown jobs, flash messages.
+   (Force update / Managed by Steam / Unknown workshop ID), progress panel
+   (eager per-screen build, visible during jobs, flash auto-hide, sticky
+   click-to-dismiss errors), check-for-updates (update badges on rows,
+   per-mod button flips to "Update", result summary flash), per-mod update
+   (button back to "Force update" when done), update-all, unknown jobs, and
+   the `update()` fallback job pump.
 3. **Download dialog** (`test_download.lua`) - the workshop-ID/URL parser plus the
    download flow: dialog open/validate/cancel, fake download job, `reloadMods`
    on completion.
@@ -48,10 +52,13 @@ Covered:
   (`tests/java/fixtures/publishedfiledetails.json`), including the string
   `publishedfileid` and the `result=9` (bogus id) omission
 - `WorkshopMap`: atomic save (no `.tmp` left behind), reload round-trip,
-  corrupt file loads empty instead of throwing
+  corrupt file loads empty instead of throwing, `42.0/mod.info` id parsing,
+  self-healing reverse lookup (stale folder-name entry repaired via mod.info
+  scan)
 - `JobManager`: check job end to end (finds updates, flags items the API no
   longer lists), update-all job, per-mod update job, invalid ids, unknown jobs,
-  steamcmd failure surfacing as a failed job with the cause in `error`
+  steamcmd failure surfacing as a failed job with the cause in `error`,
+  download serialization (second download reports "Queued...", never overlaps)
 - `SteamCmd`: explicit-path override, fake download to install to map
   recording, `installArchive` extracting a real `.tar.gz`
 - `ModInstaller`: atomic swap reinstall (stale files gone, no staging

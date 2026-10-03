@@ -7,7 +7,10 @@ out/
 *.class
 
 # Local libs (ZombieBuddy.jar etc. live here untracked; see java-src README)
-!libs/.gitkeep
+WorkshopBridge/java-src/libs/
+
+# Built mod jar (produced by `gradle installJar`; distributed via releases)
+WorkshopBridge/42/media/java/WorkshopBridge.jar
 
 # IDE
 .idea/

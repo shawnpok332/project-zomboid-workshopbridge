@@ -1,7 +1,10 @@
 -- WorkshopBridge background-job polling + progress UI.
 --
--- Java downloads/checks run on background threads; Lua polls job status on
--- tick so the game thread never blocks. Status table shape is defined in
+-- Java downloads/checks run on background threads; Lua polls job status so
+-- the game thread never blocks. The poll runs on Events.OnTick with a
+-- fallback pump from the Mods screen's per-frame update() (the tick doesn't
+-- reliably fire while a main-menu screen is open); it is idempotent, so
+-- both pumps running at once is harmless. Status table shape is defined in
 -- docs/ARCHITECTURE.md ("Job status shape").
 require "WorkshopBridge/WB_Config"
 require "WorkshopBridge/WB_Json"
