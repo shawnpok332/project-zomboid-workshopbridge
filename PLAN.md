@@ -147,6 +147,15 @@ planned properly.
   *consuming* them is just item IDs, so anonymous download works.
   Only worth doing if the mod gets real users beyond us.
 
+- [ ] **Server-join mod download prompt.** Joining a server with mods you
+  don't have pops the game's "download missing mods" prompt, which goes
+  through Steam Workshop and is useless for GOG players. Hook that prompt
+  and fulfill it through our steamcmd download path instead, then continue
+  the join. Prior note: the game's built-in `ConnectToServerState`
+  item.update() path was investigated from the decompile and deliberately
+  not reused - find the right seam (likely the workshop-download dialog or
+  state in the join flow).
+
 - [ ] **"Open in Workshop" button.** Per-mod button opening the item's
   workshop page in the system browser. Lua can't launch browsers (Kahlua has
   no `os.execute`), so this is a Java-side `ProcessBuilder`
