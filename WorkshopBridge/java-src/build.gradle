@@ -19,6 +19,34 @@ plugins {
 def zbJar = file('libs/ZombieBuddy.jar')
 def pzJavaDir = project.hasProperty('pzJavaDir') ? project.property('pzJavaDir') : 'libs/pz-java'
 
+// Fail fast with an actionable message instead of cryptic "package does not
+// exist" errors when the game classes aren't where expected.
+def pzHasGameClasses(String loc) {
+    def f = file(loc)
+    if (new File(f, 'zombie/ZomboidFileSystem.class').isFile()) return true
+    if (f.isFile() && loc.endsWith('.jar')) {
+        def zip = new java.util.zip.ZipFile(f)
+        try {
+            return zip.getEntry('zombie/ZomboidFileSystem.class') != null
+        } finally {
+            zip.close()
+        }
+    }
+    return false
+}
+if (!zbJar.isFile()) {
+    throw new GradleException(
+        "Missing ${zbJar}: build ZombieBuddy (./gradlew shadowJar) and copy the\n" +
+        "result to WorkshopBridge/java-src/libs/ZombieBuddy.jar (see java-src/README.md).")
+}
+if (!pzHasGameClasses(pzJavaDir)) {
+    throw new GradleException(
+        "PZ game classes not found under pzJavaDir=${pzJavaDir}.\n" +
+        "Point -PpzJavaDir at the folder containing zombie/ZomboidFileSystem.class\n" +
+        "(or the .jar containing it). Find it with:\n" +
+        "  find <game-install-dir> -name ZomboidFileSystem.class 2>/dev/null")
+}
+
 dependencies {
     compileOnly files(zbJar)
     compileOnly files(pzJavaDir)
