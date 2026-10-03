@@ -26,5 +26,6 @@ echo "running tests..."
 "$JH_BIN/java" \
     -Dwb.test.zomboid="$TMPD/zomboid" \
     -Dwb.test.fakebin="$HERE/fakebin" \
+    -Dwb.test.fixtures="$HERE/fixtures" \
     -Dworkshopbridge.steamApiUrl="http://127.0.0.1:$PORT/" \
     -cp "$CLASSES" com.workshopbridge.WBTest "$PORT"

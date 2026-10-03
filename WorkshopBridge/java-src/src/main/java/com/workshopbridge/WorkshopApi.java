@@ -34,20 +34,23 @@ public final class WorkshopApi {
      * Ids with no usable entry are absent from the map.
      */
     public static Map<String, Long> getTimeUpdated(List<String> workshopIds) throws IOException {
-        Map<String, Long> out = new LinkedHashMap<>();
         if (workshopIds.isEmpty()) {
-            return out;
+            return new LinkedHashMap<>();
         }
         StringBuilder body = new StringBuilder("itemcount=").append(workshopIds.size());
         for (int i = 0; i < workshopIds.size(); i++) {
             body.append("&publishedfileids%5B").append(i).append("%5D=")
                     .append(URLEncoder.encode(workshopIds.get(i), StandardCharsets.UTF_8));
         }
-        HttpRequest req = HttpRequest.newBuilder(URI.create(DETAILS_URL))
+        return parseTimeUpdated(postForm(DETAILS_URL, body.toString()));
+    }
+
+    private static String postForm(String url, String formBody) throws IOException {
+        HttpRequest req = HttpRequest.newBuilder(URI.create(url))
                 .timeout(Duration.ofSeconds(30))
                 .header("Content-Type", "application/x-www-form-urlencoded")
                 .header("User-Agent", "WorkshopBridge/1.0")
-                .POST(HttpRequest.BodyPublishers.ofString(body.toString()))
+                .POST(HttpRequest.BodyPublishers.ofString(formBody))
                 .build();
         HttpResponse<String> resp;
         try {
@@ -61,13 +64,24 @@ public final class WorkshopApi {
         if (resp.statusCode() != 200) {
             throw new IOException("Steam API HTTP " + resp.statusCode());
         }
+        return resp.body();
+    }
+
+    /**
+     * Extracts workshopId -> time_updated from a GetPublishedFileDetails
+     * response body. Package-private so tests can run it against captured
+     * real responses (see tests/java/fixtures/).
+     */
+    static Map<String, Long> parseTimeUpdated(String json) {
+        Map<String, Long> out = new LinkedHashMap<>();
         final Object root;
         try {
-            root = Json.parse(resp.body());
+            root = Json.parse(json);
         } catch (IllegalArgumentException e) {
-            throw new IOException("bad JSON from Steam API", e);
+            return out;
         }
-        Map<String, Object> response = Json.object(Json.object(root).get("response"));
+        Map<String, Object> rootObj = Json.object(root);
+        Map<String, Object> response = rootObj == null ? null : Json.object(rootObj.get("response"));
         if (response == null) {
             return out;
         }

@@ -49,6 +49,16 @@ public class WBTest {
         check(Json.stringify(m).contains("\"a\":1"), "json stringify");
 
         // ---- 2. Net messages ----
+        // ---- 2b. parse a REAL captured Steam API response ----
+        String fixtureDir = System.getProperty("wb.test.fixtures");
+        String realJson = Files.readString(
+                new File(fixtureDir, "publishedfiledetails.json").toPath(), StandardCharsets.UTF_8);
+        Map<String, Long> parsed = WorkshopApi.parseTimeUpdated(realJson);
+        check(parsed.get("2685600088") != null && parsed.get("2685600088") > 1_700_000_000L,
+                "real response: time_updated parsed", parsed.get("2685600088"));
+        check(!parsed.containsKey("1"), "real response: bogus id absent (result=9)");
+        check(WorkshopApi.parseTimeUpdated("not json").isEmpty(), "garbage -> empty map");
+        check(WorkshopApi.parseTimeUpdated("{\"response\":{}}").isEmpty(), "empty response -> empty");
         check(Net.friendlyMessage(new java.io.IOException(
                 new java.net.UnknownHostException("x")))
                 .startsWith("Couldn't reach Steam's servers"), "net dns");
