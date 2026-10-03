@@ -118,6 +118,10 @@ check(ms.wbButtonsAdded, "menu buttons added on create")
 check(ms.wbCheckBtn and ms.wbUpdateAllBtn, "check + update-all buttons exist")
 check(#ms.children >= 2, "buttons added as children", #ms.children)
 check(ms.wbUpdateAllBtn.title == "Update all", "update-all initial title")
+-- progress panel is built eagerly at menu open, hidden until a job runs
+check(ms.wbProgressPanel ~= nil and ms.wbProgressPanel.wbLabel ~= nil,
+    "progress panel created eagerly with label")
+check(not ms.wbProgressPanel:isVisible(), "progress panel hidden initially")
 
 -- idempotent re-hook
 local kids = #ms.children
@@ -154,9 +158,9 @@ wbGetWorkshopId = realWsid
 panel:updateView(fakeModInfo("SomeMod", "")) -- re-select; marks seenModIds
 ms.wbCheckBtn.onclick() -- click "Check for updates"
 tick(30)
--- progress panel: added once as a child of the screen, visible, with a label
-local prog = ms.children[#ms.children]
-check(prog ~= nil and prog.wbLabel ~= nil, "progress panel created with label")
+-- progress panel: the screen's own panel, visible, with a label
+local prog = ms.wbProgressPanel
+check(prog ~= nil and prog.wbLabel ~= nil, "progress panel present with label")
 check(prog:isVisible(), "progress panel visible during job")
 check(prog.wbLabel.name:find("Checking") ~= nil, "progress shows check message",
     prog.wbLabel.name)
@@ -203,7 +207,7 @@ check(doneState and doneState.state == "failed", "unknown job -> failed onDone")
 
 -- ---------- flash message auto-hides, error panel sticks ----------
 WB_FlashMessage(ms, "boom")
-local flashPanel = ms.children[#ms.children]
+local flashPanel = ms.wbProgressPanel
 check(flashPanel:isVisible(), "flash panel visible")
 check(flashPanel.wbLabel.name == "boom", "flash shows message", flashPanel.wbLabel.name)
 tick(200)
@@ -211,7 +215,7 @@ tick(200)
 check(not flashPanel:isVisible(), "flash auto-hides after timeout")
 
 WB_ShowError(ms, "kaput")
-local errPanel = ms.children[#ms.children]
+local errPanel = ms.wbProgressPanel
 check(errPanel:isVisible(), "error panel visible")
 check(errPanel.wbLabel.name:find("kaput") ~= nil
     and errPanel.wbLabel.name:find("click to dismiss") ~= nil,

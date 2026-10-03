@@ -102,47 +102,66 @@ end
 
 -- ---------- progress panel (throbber) ----------
 --
--- A plain ISPanel, deliberately NOT a custom derived class: an earlier
--- version derived from ISPanel with its own initialise()/createChildren()
--- never rendered in-game. Root cause: PZ's ISUIElement:instantiate() calls
--- self:createChildren() itself, so our initialise() -> createChildren() ->
--- addChild() -> auto-instantiate() -> createChildren() recursion plus an
--- explicit instantiate() built the panel three times, discarding Java peers
--- along the way. This builds it once, the same way the working menu buttons
--- are built (new -> initialise -> addChild).
+-- One panel per Mods screen, stored on the screen itself and built EAGERLY
+-- when the menu opens (WB_HookInstance), i.e. in the same construction
+-- context as the working menu buttons and download dialog. An earlier
+-- version built it lazily on tick inside a pcall'd poll callback: any
+-- construction failure there was swallowed silently and the module-level
+-- singleton stayed poisoned forever, so nothing ever rendered. Building it
+-- up-front means a failure surfaces in the log immediately, and there is
+-- no cross-screen stale-parent hazard.
 
-local progressPanel = nil
+local progressParent = nil -- screen owning the currently-visible panel
 local progressBase = ""
 local progressVisible = false
 local flashHideAt = nil
 local errorStuck = false
 
-local function WB_EnsureProgressPanel(parent)
-    if progressPanel then return progressPanel end
+local function WB_CurrentPanel()
+    if progressParent and progressParent.wbProgressPanel then
+        return progressParent.wbProgressPanel
+    end
+    return nil
+end
+
+-- Build (once per screen) the progress panel. Same construction order as
+-- the working download dialog: new -> initialise -> instantiate -> addChild.
+function WB_EnsureProgressPanel(parent)
+    if not parent then return nil end
+    if parent.wbProgressPanel then return parent.wbProgressPanel end
     local w, h = 380, 48
-    progressPanel = ISPanel:new(
-        math.max(0, parent:getWidth() / 2 - w / 2),
-        math.max(0, parent:getHeight() / 2 - h / 2),
-        w, h)
-    progressPanel:initialise()
-    progressPanel.backgroundColor = { r = 0.03, g = 0.03, b = 0.03, a = 0.93 }
-    progressPanel.borderColor = { r = 0.45, g = 0.45, b = 0.45, a = 1.0 }
+    local x = math.max(0, parent:getWidth() / 2 - w / 2)
+    local y = math.max(0, parent:getHeight() / 2 - h / 2)
+    local panel = ISPanel:new(x, y, w, h)
+    panel:initialise()
+    panel:instantiate() -- once; base createChildren is empty
+    panel.backgroundColor = { r = 0.03, g = 0.03, b = 0.03, a = 0.93 }
+    panel.borderColor = { r = 0.45, g = 0.45, b = 0.45, a = 1.0 }
     -- click dismisses a stuck error (instance-level override; vanilla
     -- ISPanel:onMouseUp is a no-op unless moveWithMouse)
-    progressPanel.onMouseUp = function(self, x, y)
+    panel.onMouseUp = function(self, px, py)
         WB_HideProgress()
     end
     local label = ISLabel:new(12, 14, 20, "", 1, 1, 1, 1, UIFont.Small, true)
     label:initialise()
-    progressPanel:addChild(label) -- auto-instantiates panel + label, no recursion
-    progressPanel.wbLabel = label
-    parent:addChild(progressPanel)
-    return progressPanel
+    label:instantiate()
+    panel:addChild(label)
+    panel.wbLabel = label
+    parent:addChild(panel)
+    panel:setVisible(false)
+    parent.wbProgressPanel = panel
+    print("[WorkshopBridge] progress panel created at "
+        .. math.floor(x) .. "," .. math.floor(y)
+        .. " java=" .. tostring(panel.javaObject ~= nil)
+        .. " labelJava=" .. tostring(label.javaObject ~= nil))
+    return panel
 end
 
 function WB_ShowProgress(parent, message)
     if not parent then return end
     local panel = WB_EnsureProgressPanel(parent)
+    if not panel then return end
+    progressParent = parent
     progressBase = message or ""
     flashHideAt = nil
     errorStuck = false
@@ -159,8 +178,9 @@ function WB_ShowError(parent, message)
     WB_ShowProgress(parent, message)
     errorStuck = true
     flashHideAt = nil
-    if progressPanel then
-        WB_SetLabel(progressPanel.wbLabel, progressBase .. "  (click to dismiss)")
+    local panel = WB_CurrentPanel()
+    if panel then
+        WB_SetLabel(panel.wbLabel, progressBase .. "  (click to dismiss)")
     end
 end
 
@@ -176,9 +196,10 @@ function WB_TickProgressPanel(tick)
         return
     end
     if errorStuck then return end -- stuck error: no throbber dots, no auto-hide
-    if progressVisible and progressPanel then
+    local panel = WB_CurrentPanel()
+    if progressVisible and panel then
         local dots = string.rep(".", math.floor(tick / 20) % 4)
-        WB_SetLabel(progressPanel.wbLabel, progressBase .. dots)
+        WB_SetLabel(panel.wbLabel, progressBase .. dots)
     end
 end
 
@@ -186,5 +207,6 @@ function WB_HideProgress()
     flashHideAt = nil
     errorStuck = false
     progressVisible = false
-    if progressPanel then progressPanel:setVisible(false) end
+    local panel = WB_CurrentPanel()
+    if panel then panel:setVisible(false) end
 end

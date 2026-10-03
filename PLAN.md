@@ -67,8 +67,20 @@ planned properly.
     discarded Java peers and never rendered. Fixed by building a plain
     `ISPanel` exactly like the working buttons (no custom derive class);
     the download dialog had the same triple-build and now builds once via
-    `buildControls()`. **Needs in-game verification** - copy the new Lua and
-    confirm the panel appears on Download/Update-all.
+    `buildControls()`.
+  - **Still not rendering (user report Oct 2026)** - only buttons and the
+    per-mod "Updating..." text appear. New lead: the panel was built LAZILY
+    inside the pcall'd tick callback, so any construction failure was
+    swallowed silently and the module-level singleton stayed poisoned
+    forever; the working dialog/buttons are all built during normal UI
+    construction. Restructured: one panel per Mods screen
+    (`ms.wbProgressPanel`), built EAGERLY in the menu hook with the dialog's
+    proven new->initialise->instantiate->addChild order, plus a diagnostic
+    log line at creation (coords + javaObject presence).
+  **Needs in-game verification** - copy the new Lua, open the Mods menu,
+  check the log for the "progress panel created" line, then run a
+  check/download and confirm the panel appears. If it still doesn't render,
+  the log line will say which step broke.
 
 - [ ] **Per-mod "Updating..." label stuck / cleared on selection change (bug).**
   Clicking a mod's Update button shows "Updating...", but it does not clear

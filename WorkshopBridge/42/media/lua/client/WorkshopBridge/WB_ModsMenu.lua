@@ -156,6 +156,9 @@ end
 local function WB_AddMenuButtons(ms)
     if ms.wbButtonsAdded then return end
     ms.wbButtonsAdded = true
+    -- build the progress panel up-front, in normal UI-construction context
+    -- (lazy tick-time construction hid failures and poisoned the panel)
+    WB_EnsureProgressPanel(ms)
     -- vanilla's action cluster is bottom-right (MapsOrder, ModsOrder, Accept),
     -- anchored right+bottom; ours join it on the left using the same pattern
     local anchor = ms.mapOrderbtn or ms.modOrderbtn or ms.acceptButton
